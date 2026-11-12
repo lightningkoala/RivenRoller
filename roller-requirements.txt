@@ -1,0 +1,5 @@
+# Virtual controller for the auto roller. Source-only on PyPI; on Windows its
+# setup offers to install the ViGEmBus driver (administrator prompt).
+# Install with --require-hashes.
+vgamepad==0.2.0 \
+    --hash=sha256:6ac247e6441e194a0277b46f6f9abc02d7995de5ed8dc495b67eddd214364a88

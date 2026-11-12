@@ -1,233 +1,83 @@
-# RivenLens
+# RivenRoller
 
-A small desktop companion for grading Rivens as you roll, view chat links or
-hover over mods.
+Auto-rolls Warframe Rivens toward a target. It's built on
+[RivenLens](https://github.com/remesis/RivenLens), which grades rolls from
+screen OCR, and adds a staged roller that presses buttons through a virtual
+DualShock 4.
 
-![RivenLens example](https://raw.githubusercontent.com/remesis/RivenLens/main/assets/screenshots/example-image.png)
+RivenRoller is **standalone**. It carries its own unmodified copy of the
+RivenLens engine (`engine/`, see `engine/UPSTREAM.json`) and has its own Python
+environment, settings folder and lock file. It never runs RivenLens' updater.
+An installed RivenLens, and its settings, are not touched. On first launch
+RivenRoller makes a one-time, read-only **copy** of your RivenLens preferences
+so your plans carry over.
 
-## Why use RivenLens instead of AlecaFrame or WFHelper?
+> **Warning:** RivenRoller sends automated controller input to Warframe. That
+> is not allowed under section 2.f of the Warframe EULA and can get your
+> account banned. Upstream RivenLens deliberately sends no input. Use at your
+> own risk.
 
-If you just want Riven grades without giving a tool access to the game or your
-account, that's what RivenLens is built for.
+## Setup and use
 
-[AlecaFrame](https://docs.alecaframe.com/get-started/connecting) gets inventory
-data through Overwolf. [WFHelper](https://github.com/WFHelper/WFHelper#inventory-data)
-offers several inventory sources; its recommended
-[helper](https://github.com/Sainan/warframe-api-helper/blob/senpai/main.cpp)
-reads session credentials from game memory to request inventory from Warframe's
-servers. Although, WFHelper's Riven scanner does work without these integrations
-or a connected account.
+See **[GUIDE.md](GUIDE.md)** for installation, the first-run check, a full
+worked example and troubleshooting. In short (Windows): install 64-bit Python
+3.13 or 3.14, double-click **Launch RivenRoller.cmd**, press **Start OCR**, set
+the plan in the planner, open the Riven's Cycle screen with the cursor on
+**Cycle**, press **Start rolling** and click into Warframe.
 
-RivenLens uses **local Optical Character Recognition (OCR)** to read the text
-already on your screen. It does not read game memory, obtain account tokens,
-interact with the game or contact Warframe's servers. You make every in-game
-choice. However, it's important to use your own judgement and use it at your own risk.
+## How a run works
 
-According to section 2.f of the Warframe EULA, you agree that you will not under any
-circumstance use unauthorized third‑party tools designed to modify the game experience.
-You should read the EULA and the code yourself and decide whether you want to use this tool.
+The plan comes from the planner. It works for every weapon in the catalog and
+every splice its type supports.
 
-Digital Extremes PSA about third‑party software:
-https://forums.warframe.com/topic/1320042-third-party-software-and-you/
+1. **Splice ingredient:** rolls until any ingredient of the planned splice
+   reaches the splice grade, then pauses so you can keep and **lock** it. The
+   spliced stat takes the higher ingredient grade (S + F splices to S).
+2. **Splice partner:** rolls until the partner appears at any grade, then
+   pauses so you can **splice**.
+3. **Manual lock** (if planned): rolls until the lock stat appears at the lock
+   grade or better, then pauses so you can lock it.
+4. **Final:** rolls until the whole target matches, then stops.
 
-## Getting started
+Safety rules the roller follows:
 
-Download the [latest release](https://github.com/remesis/RivenLens/releases/latest)
-and extract **RivenLens.zip** into a folder you can keep.
+- By default it **never presses anything on a roll you want**. It pauses on the
+  comparison screen and you pick the card. (Automatic picking is optional.)
+- It never assumes a stat is locked: starting with a useful stat already on
+  the card pauses for you to confirm first, and every Resume re-reads the card.
+- It stops, without choosing a card, on an OCR warning, an ungradable stat, a
+  missing locked or spliced stat, the wrong weapon, a timeout (for example no
+  Kuva), the roll limit, paused capture, or when Warframe isn't the focused
+  window (checked before every button; alt-tab to stop).
+- Timing is fixed and driven by the screen. Nothing is randomized or disguised.
 
-**Windows:** double-click **Launch RivenLens - Windows.cmd**. If a standard 64-bit Python 3.13 or 3.14
-install is missing, the launcher offers to download and install Python 3.13 for
-you. Existing compatible installs are left alone.
+## Layout
 
-**Linux:** on an x86-64 desktop, install Python 3.12–3.14 with its `venv`
-package, Qt's desktop libraries and fonts for your chosen language, then run
-`sh "Launch RivenLens - Linux.sh"` from the extracted folder. The launcher
-asks before downloading dependencies into your user folder. X11 needs Qt's X11
-libraries (`libxcb-cursor0` on Debian/Ubuntu). Wayland needs PipeWire and your
-desktop's ScreenCast portal backend; **Start OCR** opens its screen-sharing
-chooser. Pause and start again to change screens. Wayland capture is experimental;
-live Warframe capture on Linux still needs user testing.
+| Path | What |
+|---|---|
+| `engine/` | Unmodified RivenLens copy, with `MANIFEST.json` file hashes |
+| `roller/main.py` | Entry point: own app identity and data folder, no updater |
+| `roller/roller.py` | Staged roller state machine (no Qt or controller code) |
+| `roller/gamepad.py` | Virtual DS4 output and the Warframe focus check |
+| `roller/roller_window.py`, `roller_view.py` | RivenLens window subclass and panel |
+| `roller/tracker_mode.py` | Tracker subclass that reports the current screen |
+| `roller/settings.py` | `%LOCALAPPDATA%\RivenRoller` and `roller.json` |
+| `tools/sync_engine.py` | Refresh `engine/` from a newer RivenLens |
+| `tests/` | Headless tests: every weapon × splice, and full runs against a simulated game through RivenLens' real tracker |
 
-Linux updates use refreshed Qt screen-sharing modules in a separate runtime; the
-launcher asks before downloading them. Use the ScreenCast backend for your actual
-desktop/compositor; the GTK portal alone does not provide screen sharing. If
-permission is granted but no readable frames arrive, RivenLens pauses with a
-capture error. A stream with no new frames keeps previous grades as a snapshot;
-changing the shared screen's content resumes scanning when frames arrive again.
+## Updating the engine
 
-Choose your monitor and press **Start OCR**; on Wayland, select the screen in
-the sharing chooser. Put RivenLens beside the cards or on a second monitor.
-Capture always starts paused. **Pause OCR** stops scanning;
-closing the window or choosing **Quit** exits the app.
+```
+python tools/sync_engine.py C:\path\to\RivenLens
+python -m unittest discover -s tests
+```
 
-For mod-menu and trading-screen hovers, let the card expand and briefly keep the
-pointer off its text. The last good grades stay visible while you move around
-the card. Trading-screen detection currently uses the English Trading Policy
-and Exit labels; keep both buttons visible.
-
-## What's included
-
-- Current and new grades side by side, a shared 1.2 range multiplier and rank 8
-  by default while rolling. Chat links and expanded mod-menu or trading hovers
-  use the card's actual rank. Hover grades stay visible through brief obstructions;
-  weapon variants share grading ranges, so an unreadable variant caption does
-  not prevent grading. Distinct weapon types still use their own stat baselines.
-- Collapsible splice, manual-lock and final-odds stages with roll and Kuva estimates.
-  Collapse **Target roll planner** to resize the window down around the live grades.
-- A platinum-icon seed finder for matching Warframe Market listings, sorted by
-  the lowest listed price, with a remembered listing-age filter.
-- Multiple acceptable targets per unlocked stat slot, with odds for distinct
-  combinations. Choose **Any** at the bottom of a stat list to leave that slot open.
-- Separate good and warning dings, volume controls, ten presets each and custom audio.
-- Remembered plans per weapon, shared across its variants, plus sounds, collapsed
-  sections and window placement. Settings can optionally make the planner follow
-  the graded weapon; it stays independent by default.
-- **Always on top** in Settings for an overlay-style window. Use windowed or
-  borderless play; exclusive fullscreen may cover it.
-
-Check all acceptable targets in an unlocked stat list; press Enter or click
-outside to close it. A `*` marks a target used in another slot. Each rolled stat
-must be distinct, and overlapping combinations count only once. Locking a slot
-keeps its first selection and removes that stat from other slots. Splices and
-vintage stats stay single-select.
-
-Each stage has its own **Ding** toggle. The final stage alerts only for a fully
-read new roll matching the whole target, including the selected lock and splice
-grades. Hover over the roll and Kuva figures for their assumptions.
-
-Stage 1 watches the planner's selected splice automatically; **Watch splices**
-adds other recipes. A new qualifying positive or negative ingredient can alert,
-and finding its partner can alert separately. An unchanged ingredient carried
-through later rolls does not repeat its ingredient alert.
-
-Splice setup shows one average-roll estimate per step. For unresolved stat pools,
-**≤** marks the higher possible average, rounded up; it is not a guarantee of
-success within that many rolls. Hover over the figures for the full range.
-Manual-lock and final-odds ranges remain visible.
-
-With a vintage stat locked, splice setup searches for both ingredients on the
-same roll. Keep that lock in place; there is no separate partner-search step.
-The splice ding waits for a complete pair too.
-
-## Finding a starting seed
-
-Select a splice or manual lock, then click the **platinum button** beside the
-eligibility legend to open **Purchase Ideal Starting Seed**. Without either
-selection, the button does nothing. Searches run from your machine only when
-you open this window or press **Refresh**. Planner changes never send requests;
-age and grade changes reuse downloaded listings. Results are cached for five
-minutes. Requests run below three per second, with at most ten contract requests
-in any rolling minute and no automatic retries. The budget survives cancellation,
-reopening and Refresh within the running app. The window remembers its placement,
-and each listing appears only in its highest matching stage. RivenLens never buys,
-bids or messages sellers.
-
-For a splice, Stage 1 finds either ingredient or the already-spliced stat at the
-selected splice grade or better. With a manual lock too, Stage 2 requires that
-lock at its selected grade and both ingredients, with at least one meeting the
-splice grade (the partner can be any grade), or the qualifying splice itself.
-Both ingredient grades are shown when present: S + F still produces an S splice.
-Either positive or negative ingredients can meet the splice-grade threshold;
-manual locks still require their selected polarity.
-Without a splice, Stage 1 finds the selected lock. All sections require the
-selected format.
-
-The default age filter is **Less than 30 days**, measured from original creation,
-not the seller's latest refresh. You can save a different age filter. Results
-include PC and crossplay-enabled Xbox, PlayStation and mobile listings, but not
-Switch. Searches include both ingredient and already-spliced listings supported
-by Market. Market may limit results. Seller-entered values are graded at the
-listed rank using the shared 1.2 multiplier; verify them with the seller.
-Auction prices show the lower listed endpoint, not a guaranteed purchase price.
-
-## Language support
-
-Select your game's language in the **bottom-center language picker**.
-The first launch follows your system language when supported; your saved choice
-takes priority afterward. Windows uses its installed OCR engine for the original
-13 languages. Linux uses **RapidOCR on four CPU threads**, as do Ukrainian and
-Thai on Windows. No particular GPU is required.
-
-| Language | Warframe support | RivenLens support |
-| --- | :---: | --- |
-| English | ✅ | ✅ |
-| French | ✅ | ✅ |
-| Italian | ✅ | ✅ |
-| German | ✅ | ✅ |
-| Spanish - Spain | ✅ | ✅ |
-| Portuguese - Brazil | ✅ | ✅ |
-| Russian | ✅ | ✅ |
-| Polish | ✅ | ✅ |
-| Ukrainian | ✅ | ✅ RapidOCR |
-| Turkish | ✅ | ✅ |
-| Japanese | ✅ | ✅ |
-| Simplified Chinese | ✅ | ✅ |
-| Traditional Chinese | ✅ | ✅ |
-| Korean | ✅ | ✅ |
-| Thai | ✅ | ✅ RapidOCR |
-
-If the matching Windows OCR feature is missing, RivenLens offers to download and
-install it. This needs your approval, Windows administrator permission and an
-internet connection; your display language and keyboard stay unchanged.
-
-RapidOCR asks before downloading its pinned CPU runtime and selected language's
-models from PyPI and ModelScope. These files are cached **outside the application**
-and reused by updates; they are not bundled into each release. Recognition stays
-local. Support does not guarantee every roll will be read correctly.
-
-## A few things to know
-
-Grades measure rolled strength. A higher negative grade means a stronger penalty,
-not a more desirable negative; the same scale applies to splice ingredients.
-
-Rolling defaults to **Manual rank 8/8**; keep **Show Ranked** enabled in Warframe.
-For lower-rank rolling values, choose **Auto-detect rank pips** under
-**Settings → Grading → Riven rank**. Chat-linked previews always detect the
-card's actual rank. Your saved rolling choice is remembered.
-
-Primary and secondary Kitguns can share the same **Fits In** name. RivenLens
-checks every stat at the grading rank to identify a form only when exactly one
-fits. Overlapping forms remain **Variant unsure**; the planner's selected weapon
-does not decide which grades to show.
-
-Keep the stat text, card footer and bottom-right **Fits In** label visible; rank
-pips must also be visible when using automatic rank detection. For chat-linked
-previews, keep the bottom-right **Exit** button visible; the top-left heading can
-be covered. Small text, animations and covered cards can confuse OCR. Previous
-grades stay visible during brief interruptions. On Windows, try another capture
-method if capture is blank.
-
-**Double-check important rolls before discarding them.** The warning covers
-incomplete new-roll stat lines, not unreadable rank pips or variant labels.
-Silence does not guarantee a correct read. Grades use bundled reference values;
-planner odds are estimates, not guarantees.
-
-Images and readings stay in memory and are not uploaded or automatically saved.
-Settings, chosen sound copies and diagnostic logs are saved locally. Startup update
-checks contact GitHub, never Warframe. Windows can download, install and reopen
-an update with permission, preserving settings and backing up the previous
-version. Linux updates are manual for now. [Privacy details](docs/PRIVACY.md).
-
-Updates come from [remesis/RivenLens](https://github.com/remesis/RivenLens/releases).
-Only newer published releases prompt for an update. [Release configuration](docs/UPDATES.md).
-Git checkouts are updated through Git instead of the automatic installer.
-On Windows, copies from 0.2.13 or earlier need the
-[0.2.15 compatibility release](https://github.com/remesis/RivenLens/releases/tag/v0.2.15)
-first, or a fresh extraction of the latest ZIP, because the launchers were renamed.
-Recreate old launcher shortcuts to point to **Launch RivenLens - Windows.cmd**.
-For copies from 0.1.0 or 0.1.1, download **RivenLens.zip** once and extract it into
-a new folder to enable the updated installer. Your saved settings stay available.
+This reads the RivenLens folder (it must be a clean copy), replaces `engine/`
+and rewrites the manifest. If upstream changed the tracker, worker or window,
+the tests show what needs adjusting.
 
 ## License
 
-Copyright (C) 2026 remesis and RivenLens contributors.
-
-RivenLens is free software under the **GNU General Public License version 3
-only** ([GPL-3.0-only](LICENSE)). You may use, modify and redistribute
-it under those terms. It comes **without warranty**. Distributed modified
-versions must remain GPL-licensed and provide corresponding source code.
-[Third-party notices and credits](docs/THIRD_PARTY_NOTICES.md).
-
-[Discord](https://discord.gg/Arbitrations) · [arbi.guide](https://arbi.guide/)
-
-Not affiliated with or endorsed by Digital Extremes.
+GPL-3.0-only, the same as RivenLens, which it includes and modifies by
+extension. See `LICENSE` and `engine/docs/THIRD_PARTY_NOTICES.md`. Not
+affiliated with or endorsed by Digital Extremes or the RivenLens authors.

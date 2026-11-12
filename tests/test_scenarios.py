@@ -1,0 +1,331 @@
+# Copyright (C) 2026 RivenRoller contributors.
+# SPDX-License-Identifier: GPL-3.0-only
+"""Usage scenarios: fake Warframe -> real RivenLens tracker -> roller."""
+
+import copy
+import os
+import sys
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path[:0] = [str(ROOT / "roller"), str(ROOT / "engine/native"),
+                str(ROOT / "engine/app"), str(ROOT / "tests")]
+os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+
+from catalog import Catalog  # noqa: E402
+from preferences import DEFAULTS  # noqa: E402
+from roller import Roller  # noqa: E402
+from sim import SimGame, helpful_player, play  # noqa: E402
+
+CATALOG = Catalog()
+
+
+def weapon(name):
+    return next(w for w in CATALOG.weapons if w["name"] == name)
+
+
+def plan(name, positives, negative=None, *, lock="none", lock_slot=-1,
+         splice_grade="A", lock_grade="B"):
+    entry = weapon(name)
+    prefs = copy.deepcopy(DEFAULTS)
+    prefs.update(
+        weapon=entry["id"], variant=entry["variants"][0]["id"],
+        format=f"{len(positives)}p{1 if negative else 0}n",
+        positives=list(positives), negative=negative or "any",
+        lock=lock, positiveLockSlot=lock_slot,
+        spliceGrade=splice_grade, lockGrade=lock_grade)
+    return prefs
+
+
+def ids(card, polarity):
+    return {s["id"] for s in card["stats"] if s["polarity"] == polarity}
+
+
+BOAR = dict(positives=["multishot", "fire-rate-attack-speed", "ammo-efficiency"],
+            negative="impact", lock="positive:multishot", lock_slot=0)
+
+
+class FullRuns(unittest.TestCase):
+    """Random rolls until the target appears, with a player doing manual steps."""
+
+    def run_plan(self, name, settings=None, seed=3, game_options=None, **plan_args):
+        prefs = plan(name, **plan_args)
+        game = SimGame(CATALOG, weapon(name), seed=seed, **(game_options or {}))
+        roller = Roller(CATALOG, prefs, {"maxRolls": 10000, **(settings or {})})
+        events = play(game, roller, helpful_player(game, roller))
+        self.assertEqual(roller.phase, "done", roller.message)
+        return game, roller, events, roller.prefs  # as normalized by the planner
+
+    def assert_target(self, game, prefs):
+        self.assertEqual(game.current["format"], prefs["format"])
+        self.assertEqual(ids(game.current, "positive"), set(prefs["positives"]))
+        if prefs["negative"] != "any":
+            self.assertEqual(ids(game.current, "negative"), {prefs["negative"]})
+
+    def test_boar_ammo_efficiency_player_picks_cards(self):
+        game, roller, events, prefs = self.run_plan("Boar", **BOAR)
+        self.assert_target(game, prefs)
+        pauses = [m for e, m in events if e == "paused"]
+        self.assertEqual(len(pauses), 3, pauses)  # lock ingredient, splice, lock
+        self.assertIn("Lock it", pauses[0])
+        self.assertIn("Splice Ammo Efficiency", pauses[1])
+        self.assertIn("Multishot", pauses[2])
+        self.assertNotIn("r1", game.presses)  # never picked a new card itself
+        print(f"\n  Boar run: {game.rolls} rolls, {len(game.presses)} presses")
+
+    def test_boar_automatic_card_pick_no_dialogs(self):
+        game, roller, events, prefs = self.run_plan(
+            "Boar", settings={"autoKeepNew": True}, seed=11,
+            game_options=dict(confirm_cycle=False, confirm_keep=False), **BOAR)
+        self.assert_target(game, prefs)
+        self.assertEqual(game.presses.count("r1"), 4)  # 3 pauses + final
+
+    def test_simple_target_never_discards_a_match(self):
+        prefs = plan("Braton", ["multishot", "damage"])
+        game = SimGame(CATALOG, weapon("Braton"), seed=5)
+        seen = []
+        original = game._roll
+
+        def record():
+            original()
+            seen.append(game.new)
+        game._roll = record
+        roller = Roller(CATALOG, prefs, {"maxRolls": 10000})
+        play(game, roller, helpful_player(game, roller))
+        self.assertEqual(roller.phase, "done", roller.message)
+
+        def wanted(card):
+            return (card["format"] == "2p0n"
+                    and ids(card, "positive") == {"multishot", "damage"})
+        self.assertTrue(wanted(seen[-1]))
+        self.assertFalse(any(wanted(card) for card in seen[:-1]))
+        self.assertEqual(game.current, seen[-1])
+        print(f"\n  Braton simple target: {game.rolls} rolls")
+
+    def test_lock_only_plan(self):
+        game, roller, events, prefs = self.run_plan(
+            "Soma", positives=["critical-chance", "critical-damage"],
+            lock="positive:critical-damage", lock_slot=1, lock_grade="A")
+        self.assert_target(game, prefs)
+        self.assertEqual(len([e for e, _ in events if e == "paused"]), 1)
+        locked = next(s for s in game.current["stats"] if s["id"] == "critical-damage")
+        self.assertGreaterEqual(locked["_q"], 3.4)  # A- boundary is 3.5
+
+    def test_boundary_locked_stat_survives_layout_changes(self):
+        # Seed 11 locks Multishot at -1.47% (B/B- line is -1.5%); in other
+        # layouts rounding shows it as B-. The lock must still count as held.
+        game, roller, events, prefs = self.run_plan(
+            "Boar", settings={"autoKeepNew": True}, seed=11, **BOAR)
+        self.assert_target(game, prefs)
+
+    def test_melee_slam_damage_splice(self):
+        game, roller, events, prefs = self.run_plan(
+            "Nikana", positives=["slam-damage", "critical-damage"], seed=8)
+        self.assert_target(game, prefs)
+
+    def test_pistol_viral_splice_with_negative(self):
+        game, roller, events, prefs = self.run_plan(
+            "Lex", positives=["viral", "multishot"], negative="puncture", seed=2)
+        self.assert_target(game, prefs)
+
+    def test_archgun_splice_without_baseline(self):
+        entry = next(w for w in CATALOG.weapons if w["kind"] == "Archgun")
+        game, roller, events, prefs = self.run_plan(
+            entry["name"], positives=["magazine-reload-while-holstered", "multishot"],
+            seed=4)
+        self.assert_target(game, prefs)
+
+
+class ThingsGoingWrong(unittest.TestCase):
+    def setup(self, settings=None, scripted=None, prefs=None, name="Boar", **options):
+        prefs = prefs or plan(name, **BOAR)
+        game = SimGame(CATALOG, weapon(name), seed=1, **options)
+        junk = game.card([("damage", 0), ("zoom", 0), ("slash", 0)], [("puncture", 0)])
+        game.current = junk
+        game.scripted = [build(game) for build in (scripted or [])]
+        return game, Roller(CATALOG, prefs, settings or {}), junk
+
+    @staticmethod
+    def junk2(game):
+        return game.card([("damage", 5), ("puncture", 0)], [("zoom", 0)])
+
+    @staticmethod
+    def ingredient(game):
+        return game.card([("reload-speed", 9), ("zoom", 0), ("slash", 0)],
+                         [("puncture", 0)])
+
+    def test_missed_press_keeps_wrong_card_and_stops(self):
+        # Third press is L1 (cycle, yes, L1, cross): drop it.
+        game, roller, junk = self.setup(scripted=[self.junk2], drop_presses={2})
+        play(game, roller)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("different card", roller.message)
+        self.assertEqual(game.rolls, 1)
+
+    def test_out_of_kuva_stops(self):
+        game, roller, junk = self.setup(kuva_rolls=0)
+        play(game, roller)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("didn't open", roller.message)
+        self.assertEqual(game.presses, ["cross"])
+
+    def test_unreadable_new_roll_is_never_discarded(self):
+        game, roller, junk = self.setup(scripted=[self.ingredient],
+                                        unreadable_frames=-1)
+        play(game, roller)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("OCR", roller.message)
+        self.assertEqual(game.presses, ["cross", "cross"])  # cycle + yes only
+        self.assertEqual(game.screen, "compare")  # both cards still on screen
+
+    def test_briefly_unreadable_roll_recovers(self):
+        game, roller, junk = self.setup(scripted=[self.ingredient],
+                                        unreadable_frames=6)
+        play(game, roller)
+        self.assertEqual(roller.phase, "paused")
+        self.assertIn("Reload Speed", roller.message)
+
+    def test_wanted_roll_pauses_without_pressing(self):
+        game, roller, junk = self.setup(scripted=[self.ingredient])
+        play(game, roller)
+        self.assertEqual(roller.phase, "paused")
+        self.assertIn("Keep the NEW roll yourself", roller.message)
+        self.assertEqual(game.presses, ["cross", "cross"])
+        self.assertEqual(game.screen, "compare")
+
+    def test_resume_before_finishing_in_game_waits(self):
+        game, roller, junk = self.setup(scripted=[self.ingredient])
+        pauses = []
+
+        def impatient(event, message):  # resumes once without doing anything
+            pauses.append(message)
+            return len(pauses) == 1
+        play(game, roller, impatient)
+        self.assertEqual(roller.phase, "paused")
+        self.assertIn("Finish in-game", roller.message)
+        self.assertEqual(game.presses, ["cross", "cross"])
+
+    def test_forgot_to_lock_stops_on_next_roll(self):
+        game, roller, junk = self.setup(scripted=[self.ingredient, self.junk2])
+
+        def forgetful(event, message):
+            if game.screen == "compare" and event == "paused":
+                game.player_keeps("new")  # keeps it but never locks
+            return event == "paused"
+        play(game, roller, forgetful)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("Is it locked?", roller.message)
+        self.assertEqual(game.screen, "compare")  # nothing chosen for the player
+        self.assertEqual(game.presses, ["cross"] * 4)
+
+    def test_new_roll_identical_to_current_keeps_rolling(self):
+        same = lambda game: game.card(
+            [("damage", 0), ("zoom", 0), ("slash", 0)], [("puncture", 0)])
+        game, roller, junk = self.setup(scripted=[same, self.junk2],
+                                        settings={"maxRolls": 2})
+        play(game, roller)
+        self.assertIn("2-roll limit", roller.message)
+        self.assertEqual(game.rolls, 2)
+
+    def test_start_waits_for_you_to_click_into_warframe(self):
+        game, roller, junk = self.setup(settings={"maxRolls": 1})
+        game.focused = False
+
+        def click_in(tick, game):
+            if tick == 50:  # five seconds after pressing Start
+                game.focused = True
+        play(game, roller, on_tick=click_in)
+        self.assertEqual(game.rolls, 1)
+        self.assertIn("1-roll limit", roller.message)
+
+    def test_start_gives_up_if_warframe_never_focused(self):
+        game, roller, junk = self.setup()
+        game.focused = False
+        play(game, roller, max_ticks=600)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("Click into the game", roller.message)
+        self.assertEqual(game.presses, [])
+
+    def test_alt_tab_stops_immediately(self):
+        game, roller, junk = self.setup()
+
+        def leave(tick, game):
+            if tick == 40:
+                game.focused = False
+        play(game, roller, on_tick=leave, max_ticks=400)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("focused", roller.message)
+
+    def test_wrong_weapon_riven(self):
+        game, roller, junk = self.setup()
+        other = SimGame(CATALOG, weapon("Sobek"), seed=1)
+        game.current = other.current
+        play(game, roller)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("isn't for Boar", roller.message)
+        self.assertEqual(game.presses, [])
+
+    def test_roll_limit_is_exact(self):
+        game, roller, junk = self.setup(settings={"maxRolls": 3})
+        play(game, roller)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("3-roll limit", roller.message)
+        self.assertEqual(game.rolls, 3)
+
+    def test_start_with_ingredient_on_card_asks_before_rolling(self):
+        game, roller, junk = self.setup()
+        game.current = self.ingredient(game)
+        play(game, roller)
+        self.assertEqual(roller.phase, "paused")
+        self.assertIn("Make sure it's locked", roller.message)
+        self.assertEqual(game.presses, [])
+
+    def test_start_with_lock_stat_on_card_asks_before_rolling(self):
+        game, roller, junk = self.setup()
+        game.current = game.card(
+            [("ammo-efficiency", 8), ("multishot", 5), ("zoom", 0)], [("slash", 0)])
+        play(game, roller)
+        self.assertEqual(roller.phase, "paused")
+        self.assertIn("+Multishot", roller.message)
+        self.assertEqual(game.presses, [])
+
+    def test_odd_layout_after_splice_can_resume(self):
+        # Both ingredients on a 2-positive card splice into a 1-positive card.
+        prefs = plan("Boar", ["ammo-efficiency", "multishot"])
+        game, roller, junk = self.setup(prefs=prefs, settings={"maxRolls": 2})
+        game.current = game.card([("reload-speed", 9), ("magazine-capacity", -9)])
+        play(game, roller, helpful_player(game, roller))
+        self.assertEqual(game.spliced[0], "ammo-efficiency")
+        self.assertIn("2-roll limit", roller.message)  # it resumed and rolled
+        self.assertIn("ammo-efficiency", ids(game.current, "positive"))
+
+    def test_lock_stat_that_cannot_roll_stops_at_start(self):
+        prefs = plan("Boar", ["multishot", "damage"], lock="positive:multishot",
+                     lock_slot=0)
+        game, roller, junk = self.setup(prefs=prefs)
+        original = Roller.start
+
+        def start(self, now):
+            step = original(self, now)
+            self.planner.is_rollable = lambda *_: False
+            return step
+        roller.start = start.__get__(roller)
+        play(game, roller)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("can't roll", roller.message)
+        self.assertEqual(game.presses, [])
+
+    def test_ingredient_needing_an_impossible_partner_is_skipped(self):
+        game, roller, junk = self.setup()
+        roller.start(0)
+        traits = copy.deepcopy(roller.weapon["family"]["traits"])
+        traits["magazine-capacity"]["positive"] = "excluded"
+        roller.weapon = {**roller.weapon, "family": {"traits": traits}}
+        # -Reload Speed needs +Magazine Capacity, which can't roll here.
+        self.assertFalse(roller._completable("reload-speed", "negative"))
+        self.assertTrue(roller._completable("reload-speed", "positive"))
+        self.assertTrue(roller._completable("ammo-maximum", "negative"))
+
+if __name__ == "__main__":
+    unittest.main()
