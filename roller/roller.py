@@ -117,6 +117,7 @@ class Roller:
         self.stage = None
         self.rolls = 0
         self.sending = False
+        self.record = None
 
     # ----------------------------------------------------------------- control
 
@@ -179,6 +180,7 @@ class Roller:
         self.sending = False
         self.yes_retry = 0
         self.decision = ""
+        self.record = None
         self.warned = False
         self.focused = True
         self.after = None
@@ -506,6 +508,24 @@ class Roller:
             ),
             "WANTED" if outcome else "keep current",
         )
+        # The same roll as data, for the phone companion page.
+        self.record = {
+            "roll": self.rolls,
+            "stage": stage,
+            "title": new.get("title", ""),
+            "format": new.get("format", ""),
+            "wanted": outcome is not None,
+            "stats": [
+                {
+                    "name": self.name(stat["id"]),
+                    "polarity": stat["polarity"],
+                    "value": stat["value"],
+                    "unit": stat.get("unit", ""),
+                    "grade": result.get("grade", "?"),
+                }
+                for stat, result in graded
+            ],
+        }
         if outcome is None:
             return self._keep("keepOld", self.previous_key, None, now)
         if self.settings["autoKeepNew"]:

@@ -103,6 +103,41 @@ assert history.take(["a", "b"]) == []
 history.muted = False
 assert history.take(["a", "b", "c"]) == ["c"]
 
+# Phone companion: off by default; when enabled it serves the run read-only.
+import json  # noqa: E402
+import socket  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+
+assert window.companion is None and not window.companion_store.state["enabled"]
+assert window.companion_view.parentWidget() is window.planner.parentWidget()
+probe = socket.socket()
+probe.bind(("127.0.0.1", 0))
+free_port = probe.getsockname()[1]
+probe.close()
+notified = []
+window.notifier.opener = lambda request: notified.append(request)
+window.companion_store.state["port"] = free_port
+window.companion_view.topic.setText("rivenroller-test")
+window.companion_view.enabled.setChecked(True)  # as ticked by the user
+assert window.companion is not None
+shown = window.companion_view.link.text()
+assert f":{free_port}" in shown and window.companion.token in shown, shown
+assert len(window.companion.token) == 6
+window.companion_view.copy_link()
+assert QApplication.clipboard().text() == window.companion.url()
+assert (directory / "companion.json").is_file()
+
+
+def phone(path="/state"):
+    url = "http://127.0.0.1:{}{}?k={}".format(
+        window.companion.port, path, window.companion.token)
+    with urllib.request.urlopen(url, timeout=5) as response:
+        return response.read()
+
+
+assert json.loads(phone())["phase"] == "idle"
+
 junk = card(stat("damage"), stat("zoom"), stat("slash"),
             stat("puncture", polarity="negative"))
 window.start_roller()
@@ -118,6 +153,23 @@ assert Pad.log == ["cross", "cross"], Pad.log  # wanted roll: nothing pressed
 assert window.roller.phase == "paused", window.roller.message
 assert "Keep the NEW roll yourself" in window.roller_view.status.text()
 assert "Reload Speed" in window.roller_view.status.text()
+seen = json.loads(phone())
+assert seen["phase"] == "paused" and seen["rolls"] == 1, seen
+assert seen["stage"] == "partner" and "Reload Speed" in seen["message"]
+assert seen["plan"]["weapon"] and seen["plan"]["target"].startswith("+"), seen["plan"]
+(rolled,) = seen["history"]
+assert rolled["roll"] == 1 and rolled["wanted"] is True and rolled["stage"] == "ingredient"
+assert {"name": "Reload Speed", "polarity": "positive", "grade": "S"}.items() <= {
+    k: v for k, v in rolled["stats"][0].items()}.items(), rolled
+assert len(rolled["stats"]) == 4 and rolled["stats"][3]["polarity"] == "negative"
+for _ in range(100):  # the notification goes out on its own thread
+    if notified:
+        break
+    QCoreApplication.processEvents()
+    time.sleep(0.01)
+assert len(notified) == 1 and notified[0].full_url == "https://ntfy.sh/rivenroller-test"
+assert notified[0].headers["Title"] == "Roller needs you"
+assert "Reload Speed" in notified[0].data.decode("utf-8")
 push(screen("current", ingredient))  # the player kept the new card
 assert not window.roller_view.start.isEnabled()
 # Resume while RivenRoller itself has focus: it waits instead of pressing.
@@ -139,6 +191,34 @@ for _ in range(50):
     time.sleep(0.01)
 assert window.roller.phase == "stopped", window.roller.phase
 assert "focused" in window.roller.message and Pad.log == ["cross", "cross"]
+for _ in range(100):
+    if len(notified) > 1:
+        break
+    QCoreApplication.processEvents()
+    time.sleep(0.01)
+assert notified[1].headers["Title"] == "Roller stopped", notified
+assert json.loads(phone())["phase"] == "stopped"
+# Turning the page off closes the port.
+window.companion_view.enabled.setChecked(False)
+assert window.companion is None and "off" in window.companion_view.link.text()
+try:
+    urllib.request.urlopen(f"http://127.0.0.1:{free_port}/", timeout=2)
+    raise AssertionError("page still served after being turned off")
+except urllib.error.HTTPError:
+    raise AssertionError("page still served after being turned off")
+except OSError:
+    pass
+# A fault inside the companion is logged and never reaches the run.
+def broken(*_):
+    raise RuntimeError("companion fault")
+
+
+window.publish_companion = broken
+window.start_roller()
+assert window.roller.active and not window.roller_view.start.isEnabled()
+window.stop_roller("Stopped by you.", quiet=True)
+assert window.roller.phase == "stopped" and window.roller_view.start.isEnabled()
+del window.publish_companion
 window.apply_capture()  # pausing OCR must not error with a stopped roller
 assert not any((Path(data) / "Arbitrations").glob("**/*")), "touched RivenLens data"
 window.close()

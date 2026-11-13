@@ -9,9 +9,13 @@ import traceback
 import screen_modes
 from tracker_mode import ModeTracker
 
+from PySide6.QtCore import Signal
+
 from alerts import History
+from companion import Companion, CompanionSettings, Notifier, RunState
+from companion_view import CompanionView
 from gamepad import GamepadUnavailable, Hotkeys, InputSender
-from roller import Roller
+from roller import STAGE_LABELS, Roller
 from roller_view import RollerView
 from window import MainWindow
 from worker import CaptureWorker
@@ -34,6 +38,8 @@ class QuietHistory(History):
 
 
 class RollerWindow(MainWindow):
+    notify_result = Signal(str)  # from the notification thread
+
     def __init__(self, preferences, store, worker_factory=CaptureWorker):
         super().__init__(preferences, worker_factory)
         self.match_history = QuietHistory()
@@ -62,6 +68,19 @@ class RollerWindow(MainWindow):
         column = self.planner.parentWidget().layout()
         column.insertSpacing(column.count() - 1, 8)
         column.insertWidget(column.count() - 1, self.roller_view)
+        # Phone companion: read-only status page and push notifications.
+        self.companion = None
+        self.run_state = RunState()
+        self.companion_store = CompanionSettings(preferences.directory)
+        self.notifier = Notifier(on_result=self.notify_result.emit)
+        self.companion_view = CompanionView(self.companion_store)
+        self.companion_view.changed.connect(self.apply_companion)
+        self.companion_view.toggled.connect(self.schedule_balance)
+        self.companion_view.test_requested.connect(self.test_notification)
+        self.notify_result.connect(self.companion_view.show_notify_result)
+        column.insertSpacing(column.count() - 1, 8)
+        column.insertWidget(column.count() - 1, self.companion_view)
+        self.apply_companion()
         self.schedule_balance()
 
     # ------------------------------------------------- RivenLens window hooks
@@ -97,7 +116,79 @@ class RollerWindow(MainWindow):
                 self.roller.stop("Closing.")
             if hasattr(self, "input"):
                 self.input.close()
+            if getattr(self, "companion", None) is not None:
+                self.companion.close()
+                self.companion = None
         super().closeEvent(event)
+
+    # ------------------------------------------------------- phone companion
+
+    def apply_companion(self):
+        """Start, stop or restart the status page to match its settings."""
+        self.companion_store.save()
+        settings = self.companion_store.state
+        if self.companion is not None and (
+            not settings["enabled"] or self.companion.token != settings["token"]
+        ):
+            self.companion.close()
+            self.companion = None
+        if settings["enabled"] and self.companion is None:
+            try:
+                self.companion = Companion(settings["token"], settings["port"])
+            except OSError as exc:
+                self.companion_view.show_link(
+                    None, problem=f"Couldn't start the page: {exc}"
+                )
+                return
+            self.publish_companion()
+        if self.companion is None:
+            self.companion_view.show_link(None)
+        else:
+            self.companion_view.show_link(self.companion.address(), self.companion.token)
+
+    def publish_companion(self):
+        roller = self.roller
+        if roller is not None:
+            stage = roller.stage
+            self.run_state.update(
+                phase=roller.phase,
+                stage=stage,
+                stageLabel=STAGE_LABELS.get(stage, ""),
+                message=roller.message,
+                rolls=roller.rolls,
+                maxRolls=roller.settings["maxRolls"],
+            )
+            record = getattr(roller, "record", None)
+            if record:
+                self.run_state.add_roll(record)
+        if self.companion is not None:
+            self.companion.publish(self.run_state.data)
+
+    def plan_summary(self):
+        planner = getattr(self.roller, "planner", None)
+        if planner is None:
+            return {}
+        parts = [
+            "+" + " / ".join(planner.name(i) for i in slot)
+            for slot in planner.positive_options
+            if slot
+        ]
+        if planner.has_negative:
+            negatives = [t for t in planner.targets(3) if t]
+            if negatives:
+                parts.append("−" + " / ".join(planner.name(i) for i in negatives))
+        return {"weapon": planner.weapon["name"], "target": ", ".join(parts)}
+
+    def test_notification(self):
+        sent = self.notifier.send(
+            self.companion_store.state,
+            "test",
+            "Notifications from RivenRoller are working.",
+        )
+        self.companion_view.show_notify_result(
+            "Sending..." if sent else "Fill in an ntfy topic or a Discord webhook first.",
+            pending=True,
+        )
 
     # ----------------------------------------------------------- auto roller
 
@@ -149,6 +240,7 @@ class RollerWindow(MainWindow):
         self.log(f"--- start: weapon={self.state.get('weapon')} "
                  f"bindings={self.store.state['bindings']}")
         step = self.roller.start(time.monotonic())
+        self.run_state.reset(self.plan_summary())
         plan = getattr(self.roller, "prefs", self.state)
         planner = getattr(self.roller, "planner", None)
         # Each slot lists every accepted stat (first choice plus alternatives).
@@ -218,3 +310,11 @@ class RollerWindow(MainWindow):
         if step.event and self.tray and not quiet:
             self.tray.showMessage("RivenRoller", step.message)
         self.roller_view.set_phase(self.roller.phase, step.message or None)
+        try:  # the companion only reports; a fault in it must never touch a run
+            if step.event and not quiet:
+                self.notifier.send(
+                    self.companion_store.state, step.event, step.message
+                )
+            self.publish_companion()
+        except Exception:
+            traceback.print_exc()
