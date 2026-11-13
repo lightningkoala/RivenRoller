@@ -16,6 +16,8 @@ from worker import CaptureWorker
 class RollerWindow(MainWindow):
     def __init__(self, preferences, store, worker_factory=CaptureWorker):
         super().__init__(preferences, worker_factory)
+        self.run_log = preferences.directory / "logs" / "roller-run.log"
+        self._seen = None
         self.setWindowTitle("RivenRoller")
         self.store = store
         self.roller = None
@@ -50,6 +52,7 @@ class RollerWindow(MainWindow):
             and getattr(self, "roller", None) is not None
             and self.roller.active
         ):
+            self.log_screen(state)
             try:
                 step = self.roller.step(
                     state, time.monotonic(), self.input.focused()
@@ -74,6 +77,31 @@ class RollerWindow(MainWindow):
 
     # ----------------------------------------------------------- auto roller
 
+    def log(self, text):
+        """Append to a small local log of what the roller saw and pressed."""
+        try:
+            self.run_log.parent.mkdir(parents=True, exist_ok=True)
+            if self.run_log.exists() and self.run_log.stat().st_size > 512 * 1024:
+                self.run_log.unlink()
+            with open(self.run_log, "a", encoding="utf-8") as file:
+                file.write(f"{time.strftime('%H:%M:%S')} {text}\n")
+        except OSError:
+            pass
+
+    def log_screen(self, state):
+        """Log only changes: screen mode, which cards are fresh, roller phase."""
+        cards = ",".join(
+            f"{c.get('slot')}:{'stale' if c.get('snapshot') else 'fresh'}"
+            for c in state.get("cards", [])
+        )
+        seen = (state.get("mode"), cards, self.roller.phase, state.get("status"))
+        if seen != self._seen:
+            self._seen = seen
+            self.log(
+                f"screen={seen[0]} cards=[{cards}] ocr={seen[3]} phase={seen[2]} "
+                f"focused={self.input.focused()}"
+            )
+
     def start_roller(self):
         if self.roller is not None and self.roller.active:
             return
@@ -86,6 +114,8 @@ class RollerWindow(MainWindow):
             self.roller_view.set_phase("stopped", str(exc))
             return
         self.roller = Roller(self.catalog, self.state, self.store.state)
+        self.log(f"--- start: weapon={self.state.get('weapon')} "
+                 f"bindings={self.store.state['bindings']}")
         self.apply_roll_step(self.roller.start(time.monotonic()))
 
     def hotkey_go(self):
@@ -109,6 +139,7 @@ class RollerWindow(MainWindow):
     def input_finished(self, sent, problem):
         if self.roller is None or not self.roller.active:
             return
+        self.log(f"press result: {'sent' if sent else 'NOT sent - ' + problem}")
         if sent:
             self.roller.sent(time.monotonic())
         else:
@@ -116,7 +147,10 @@ class RollerWindow(MainWindow):
 
     def apply_roll_step(self, step, quiet=False):
         if step.buttons:
+            self.log(f"press {' '.join(step.buttons)} (phase={self.roller.phase})")
             self.input.send(step.buttons)
+        if step.event:
+            self.log(f"{step.event}: {step.message}")
         if step.event in ("paused", "done"):
             self.warning_sound.stop()
             self.good_sound.play()
