@@ -12,6 +12,19 @@ An installed RivenLens, and its settings, are not touched. On first launch
 RivenRoller makes a one-time, read-only **copy** of your RivenLens preferences
 so your plans carry over.
 
+## Warning
+
+According to section 2.f of the Warframe EULA, you agree that you will not
+under any circumstance use unauthorized third-party tools designed to modify
+the game experience. You should read the EULA and the code yourself and decide
+whether you want to use this tool.
+
+This tool emulates keystrokes (or controller actions) to interact with the
+game, similar to a macro. Macros have caused bans before for "automating the
+game".
+
+Digital Extremes PSA about third-party software:
+https://forums.warframe.com/topic/1320042-third-party-software-and-you/
 
 ## Setup and use
 
