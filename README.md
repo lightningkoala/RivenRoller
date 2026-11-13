@@ -12,10 +12,6 @@ An installed RivenLens, and its settings, are not touched. On first launch
 RivenRoller makes a one-time, read-only **copy** of your RivenLens preferences
 so your plans carry over.
 
-> **Warning:** RivenRoller sends automated controller input to Warframe. That
-> is not allowed under section 2.f of the Warframe EULA and can get your
-> account banned. Upstream RivenLens deliberately sends no input. Use at your
-> own risk.
 
 ## Setup and use
 
