@@ -61,6 +61,7 @@ AIM_SECONDS = 3.0
 # a screen change. If a press visibly did nothing, repeat it (twice at most).
 WAKE_RETRY_SECONDS = 1.2
 KEEP_RETRY_SECONDS = 2.5
+YES_RETRY_SECONDS = 1.5
 PRESS_RETRIES = 2
 STABLE_READS = 2  # Fresh, identical worker states before a decision or press.
 
@@ -159,6 +160,7 @@ class Roller:
         self.stage = None
         self.rolls = 0
         self.sending = False
+        self.yes_retry = 0
         self.decision = ""
         self.warned = False
         self.focused = True
@@ -325,6 +327,7 @@ class Roller:
     def _on_await_dialog(self, mode, cards, now):
         if mode == "transition":
             self.wake_retry = 0
+            self.yes_retry = PRESS_RETRIES
             self._enter("await_roll", now)
             return self._press("confirmYes")
         if mode == "comparison":
@@ -347,7 +350,22 @@ class Roller:
             now, "dialog", "The Cycle press didn't open the confirmation dialog."
         )
 
+    def _yes_again(self, mode, now):
+        """The Yes/No dialog is still open well after Yes was pressed."""
+        if (
+            mode == "transition"
+            and self.yes_retry > 0
+            and now - self.since > YES_RETRY_SECONDS
+        ):
+            self.yes_retry -= 1
+            self.message = "Yes didn't register; pressing it again."
+            return self._press("confirmYes")
+        return None
+
     def _on_await_roll(self, mode, cards, now):
+        again = self._yes_again(mode, now)
+        if again:
+            return again
         new = cards.get("new")
         if (
             mode in ("comparison", "unknown")
@@ -389,8 +407,11 @@ class Roller:
             # once; the dialog can stay visible for a few frames afterwards.
             if not self.keep_confirmed:
                 self.keep_confirmed = True
+                self.yes_retry = PRESS_RETRIES
                 return self._press("confirmYes")
-            return self._timeout(now, "settle", "The keep dialog didn't close.")
+            return self._yes_again(mode, now) or self._timeout(
+                now, "settle", "The keep dialog didn't close."
+            )
         if (
             mode == "comparison"
             and not self.keep_confirmed
@@ -624,7 +645,7 @@ class Roller:
         self.rolls += 1
         self.previous_key = key(current)
         self.stable, self.stable_key, self.compared = 0, None, False
-        self.wake_retry, self.warned = PRESS_RETRIES, False
+        self.wake_retry, self.warned, self.yes_retry = PRESS_RETRIES, False, 0
         self._enter("await_dialog", now)
         self.message = f"Rolling ({STAGE_LABELS[self.stage].lower()}), roll {self.rolls}."
         return self._press("cycle")

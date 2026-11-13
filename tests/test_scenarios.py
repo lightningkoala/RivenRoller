@@ -168,7 +168,8 @@ class ThingsGoingWrong(unittest.TestCase):
         # (index 5) and, separately, the Confirm after L1 (index 3).
         # L1 toggles the selection, so the repeat after a dropped Confirm must be
         # the Confirm alone (a real run kept the wrong card otherwise).
-        for dropped, extra in ((5, 1), (3, 1)):
+        # Also the Yes on either dialog (indexes 1 and 4), as logged on a real run.
+        for dropped, extra in ((5, 1), (3, 1), (1, 1), (4, 1), (6, 1)):
             game, roller, junk = self.setup(settings={"maxRolls": 3},
                                             drop_presses={dropped})
             play(game, roller)
