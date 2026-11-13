@@ -172,7 +172,16 @@ grade and lock grade.
      it, then Resume…"
    - **You:** select the new card, lock Magazine Capacity in-game, get back to
      the Cycle screen, put the pointer on Cycle and press **F8** to resume.
-3. **It rolls for the partner** (Reload Speed here, any grade).
+   A negative counts as an ingredient too, e.g. −Weapon Recoil. Its grade is
+   the size of the penalty (−S is the biggest penalty), which is the value the
+   splice inherits, so −S Recoil + Ammo Maximum gives S Ammo Efficiency. If
+   your target has no negative, negative ingredients are skipped: splicing
+   with one leaves a negative on the Riven for good.
+3. **It rolls for the partner** (Reload Speed here, any grade). It only asks
+   you to splice when the card also has your target layout (3 positives +
+   negative here). After a splice the Riven keeps the same number of positives
+   and negatives on every cycle, so splicing on any other layout would make
+   the target impossible.
    - *Pause:* "Partner found (…). Splice Ammo Efficiency now, then Resume."
    - **You:** keep the new card, splice in-game, return to the Cycle screen,
      pointer on Cycle, **F8**.
@@ -186,7 +195,8 @@ Things that make it shorter:
 
 - No splice in the plan: it skips steps 2–3.
 - No lock in the plan: it skips step 4.
-- Both ingredients land on the same roll: it skips straight to "splice now".
+- Both ingredients land on the same roll with the target layout: it skips
+  straight to "splice now".
 - You start with a useful stat already on the card: it pauses *before
   rolling* and asks you to make sure that stat is locked.
 
@@ -214,6 +224,9 @@ It stops and plays the warning sound, without choosing a card, when:
 - OCR can't read the new roll, or a stat's value doesn't fit any grade. Look
   at the roll yourself.
 - A stat that should be locked or spliced is missing from the new roll.
+- The Riven is already spliced but has a different layout from the planner's
+  format. A spliced Riven can't change layout, so remove the splice or change
+  the format.
 - The Riven on screen isn't for the planner's weapon.
 - A screen doesn't appear in time (for example you're out of Kuva).
 - The roll limit is reached.

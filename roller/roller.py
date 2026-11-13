@@ -254,7 +254,7 @@ class Roller:
             # Auto never assumes a stat is locked: when the card already holds
             # something the next stage depends on, pause for you to confirm.
             if self.splice and not self._has(graded, self.splice):
-                pair = self._ready_pair(graded)
+                pair = self._ready_pair(graded, current)
                 found = self._best_ingredient(graded)
                 if pair:
                     stage = self._after_splice()
@@ -320,7 +320,7 @@ class Roller:
         self.stage = stage
         if confirm:
             return self._pause(confirm)
-        problem = self._held_problem(graded)
+        problem = self._held_problem(graded, current)
         if problem:
             return self._stop(problem)
         if not self.focused:
@@ -341,7 +341,7 @@ class Roller:
         graded = self._grade(current, strict=False)
         if graded is None:
             return self._pause(self._grade_problem(current) + " Then Resume.")
-        problem = self._held_problem(graded)
+        problem = self._held_problem(graded, current)
         if problem:
             return self._pause(problem + " Fix it in-game, then Resume.")
         if not self.focused:
@@ -484,7 +484,7 @@ class Roller:
         graded = self._grade(new)
         if graded is None:
             return self._stop(self._grade_problem(new))
-        problem = self._held_problem(graded)
+        problem = self._held_problem(graded, new)
         if problem:
             return self._stop(problem)
         stage = self.stage
@@ -526,7 +526,7 @@ class Roller:
                 f"{self.name(self.splice)} rolled directly at {grade} or better. "
                 "Lock it if you want to keep it, then Resume.",
             )
-        pair = self._ready_pair(graded)
+        pair = self._ready_pair(graded, card)
         if pair:
             self.stage = self._after_splice()
             return (
@@ -547,7 +547,7 @@ class Roller:
         )
 
     def _match_partner(self, card, graded):
-        pair = self._ready_pair(graded, require=self.locked_ingredient[0])
+        pair = self._ready_pair(graded, card, require=self.locked_ingredient[0])
         if not pair:
             return None
         self.stage = self._after_splice()
@@ -630,11 +630,17 @@ class Roller:
         def can(other, sign):
             return traits.get(other, {}).get(sign, "excluded") != "excluded"
 
+        # Splicing fixes the layout for good, and a consumed negative is
+        # replaced by a new negative. So a negative may only take part when the
+        # target layout has one.
+        negative_ok = self.planner.has_negative
+        if polarity == "negative" and not negative_ok:
+            return False
         for pair in self.pairs:
             if identity in pair:
                 other = pair[0] if pair[1] == identity else pair[1]
                 if can(other, "positive") or (
-                    polarity == "positive" and can(other, "negative")
+                    polarity == "positive" and negative_ok and can(other, "negative")
                 ):
                     return True
         return False
@@ -655,12 +661,17 @@ class Roller:
         sign = "−" if stat["polarity"] == "negative" else "+"
         return sign + self.name(stat["id"])
 
-    def _ready_pair(self, graded, require=None):
-        """Both ingredients present, one positive, and one at the splice grade.
+    def _ready_pair(self, graded, card, require=None):
+        """Both ingredients present, one positive, and one at the splice grade,
+        on a card that already has the target layout.
 
         The spliced stat takes the higher ingredient grade, so the partner can be
-        any grade (S + F splices to S).
+        any grade (S + F splices to S). Splicing keeps the positive/negative
+        counts for good (a consumed negative comes back as a new random
+        negative), so splicing on any other layout could never reach the target.
         """
+        if not self._layout_ok(card):
+            return None
         present = {stat["id"]: (stat, result) for stat, result in graded}
         for pair in self.pairs:
             if require and require not in pair:
@@ -673,7 +684,17 @@ class Roller:
                 return pair
         return None
 
-    def _held_problem(self, graded):
+    def _layout_ok(self, card):
+        return card.get("format") == self.prefs["format"]
+
+    @staticmethod
+    def _layout_name(fmt):
+        k, has_negative = FORMATS.get(fmt, (None, False))
+        if k is None:
+            return str(fmt)
+        return f"{k} positives" + (" + negative" if has_negative else ", no negative")
+
+    def _held_problem(self, graded, card):
         """Stats that must survive every roll of this stage (locks, splices)."""
         if self.stage == "partner":
             identity, polarity = self.locked_ingredient
@@ -684,6 +705,14 @@ class Roller:
         if self.stage in ("lock", "final") and self.splice:
             if not self._has(graded, self.splice, "positive"):
                 return f"{self.name(self.splice)} isn't on the card. Was it spliced?"
+            if not self._layout_ok(card):
+                return (
+                    f"The spliced card has {self._layout_name(card.get('format'))}, "
+                    f"but the target needs {self._layout_name(self.prefs['format'])}. "
+                    "A spliced Riven keeps its layout on every cycle, so this card "
+                    "can't reach the target. Remove the splice or change the "
+                    "planner's format."
+                )
         if self.stage == "final" and self.lock:
             if not self._has(
                 graded,

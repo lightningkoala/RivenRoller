@@ -41,9 +41,14 @@ every splice its type supports.
 
 1. **Splice ingredient:** rolls until any ingredient of the planned splice
    reaches the splice grade, then pauses so you can keep and **lock** it. The
-   spliced stat takes the higher ingredient grade (S + F splices to S).
-2. **Splice partner:** rolls until the partner appears at any grade, then
-   pauses so you can **splice**.
+   spliced stat takes the higher ingredient grade (S + F splices to S). A
+   negative ingredient counts too (graded by the size of its penalty, so −S
+   splices to S), but only when the target has a negative.
+2. **Splice partner:** rolls until the partner appears at any grade on a card
+   that already has the target layout, then pauses so you can **splice**.
+   Splicing fixes the number of positives and negatives for good (a consumed
+   negative comes back as a new random negative), so it never asks you to
+   splice on a layout that can't reach the target.
 3. **Manual lock** (if planned): rolls until the lock stat appears at the lock
    grade or better, then pauses so you can lock it.
 4. **Final:** rolls until the whole target matches, then stops.
