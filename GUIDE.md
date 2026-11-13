@@ -225,6 +225,14 @@ It stops and plays the warning sound, without choosing a card, when:
 roller recognised, the short text lines OCR read on them, and each button it
 pressed.
 
+**"No verified new roll appeared" while the new roll is clearly on screen.**
+OCR is probably reading something besides the game. RivenRoller hides its own
+window from screen capture (you still see it; your own screenshots and streams
+won't). That needs Windows 10 version 2004 or later. If the status line says it
+couldn't hide the window, keep RivenRoller on a different monitor from
+Warframe. Other windows showing Riven names over the game (a browser, Discord)
+can cause the same thing.
+
 **Nothing opens.** Run *Launch RivenRoller (show errors).cmd*. Errors from a
 normal launch are also logged to
 `%LOCALAPPDATA%\RivenRoller\logs\rivenroller.log`.

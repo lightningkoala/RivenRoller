@@ -78,6 +78,26 @@ class StandaloneTests(unittest.TestCase):
         keys.poll(read)
         self.assertEqual(fired, ["go", "stop"])
 
+    def test_every_top_level_window_is_excluded_from_capture(self):
+        from PySide6.QtWidgets import QApplication, QLabel, QWidget
+        from capture_exclusion import CaptureExclusion
+        app = QApplication.instance() or QApplication([])
+        seen = []
+        guard = CaptureExclusion(app, exclude=lambda w: seen.append(w) or True)
+        window, child = QWidget(), None
+        child = QLabel("inside", window)
+        popup = QLabel("separate window")
+        window.show()
+        popup.show()
+        app.processEvents()
+        self.assertIn(window, seen)
+        self.assertIn(popup, seen)
+        self.assertNotIn(child, seen)
+        self.assertFalse(guard.failed)
+        app.removeEventFilter(guard)
+        window.close()
+        popup.close()
+
     def test_engine_matches_upstream_manifest(self):
         manifest = json.loads((ROOT / "engine/MANIFEST.json").read_text())
         for relative, digest in manifest["files"].items():

@@ -7,6 +7,7 @@ import time
 import traceback
 
 import screen_modes
+from tracker_mode import ModeTracker
 
 from gamepad import GamepadUnavailable, Hotkeys, InputSender
 from roller import Roller
@@ -96,12 +97,19 @@ class RollerWindow(MainWindow):
             f"{c.get('slot')}:{'stale' if c.get('snapshot') else 'fresh'}"
             for c in state.get("cards", [])
         )
-        seen = (state.get("mode"), cards, self.roller.phase, state.get("status"))
+        seen = (
+            state.get("mode"),
+            cards,
+            self.roller.phase,
+            state.get("status"),
+            ModeTracker.last_read,
+        )
         if seen != self._seen:
             self._seen = seen
             self.log(
                 f"screen={seen[0]} cards=[{cards}] ocr={seen[3]} phase={seen[2]} "
-                f"focused={self.input.focused()} text={list(screen_modes.last_texts)}"
+                f"focused={self.input.focused()} read=[{seen[4]}] "
+                f"text={list(screen_modes.last_texts)}"
             )
 
     def start_roller(self):

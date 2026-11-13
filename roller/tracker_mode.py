@@ -51,9 +51,23 @@ class ModeTracker(RollTracker):
                 placed.append({**card, "screenX": 0.3 + 0.4 * rank / (len(cards) - 1)})
         return {**result, "cards": placed}
 
+    # What the reader returned for the latest frame, for the run log.
+    last_read = ""
+
     def update(self, result, now):
         result = self._place(result)
         raw = result.get("cards", [])
+        ModeTracker.last_read = "; ".join(
+            [
+                "{} {}".format(
+                    str(card.get("title", "?"))[:24],
+                    "ok" if card.get("complete") else
+                    "incomplete " + str(card.get("unreadable") or "")[:60],
+                )
+                for card in raw
+            ]
+            or [str(result.get("reason") or "no cards")[:80]]
+        )
         if (
             result.get("mode", "unknown") == "unknown"
             and self.view_mode != "hover"

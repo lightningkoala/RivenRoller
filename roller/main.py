@@ -39,6 +39,7 @@ from appearance import theme_for  # noqa: E402
 from desktop import ICON  # noqa: E402
 from preferences import Preferences  # noqa: E402
 from releases import ReleaseConfig  # noqa: E402
+from capture_exclusion import CaptureExclusion  # noqa: E402
 from roller_window import RollerWindow  # noqa: E402
 
 APP_ID = "RivenRoller.App"
@@ -95,6 +96,7 @@ def main():
         palette.setColor(role, QColor(color))
     app.setPalette(palette)
     app.setStyleSheet(theme_for())
+    exclusion = CaptureExclusion(app)
     directory = settings.data_directory()
     imported = settings.import_rivenlens_preferences(directory)
     lease = instance.InstallationLease(ROOT, directory / "locks")
@@ -111,6 +113,11 @@ def main():
             QMessageBox.critical(None, "RivenRoller could not start", str(exc))
             return 1
         window.show()
+        if exclusion.failed and sys.platform == "win32":
+            window.roller_view.status.setText(
+                "Couldn't hide this window from screen capture. Keep it on a "
+                "different monitor from Warframe, or OCR may read it."
+            )
         if imported:
             QTimer.singleShot(
                 400,
