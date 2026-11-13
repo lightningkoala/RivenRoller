@@ -54,6 +54,8 @@ TIMEOUTS = {
     "start": 6.0,  # start/resume -> verified card on the Cycle screen
     "focus": 20.0,  # start/resume -> you clicking back into Warframe
 }
+# After you switch back into Warframe, time to put the pointer on Cycle.
+AIM_SECONDS = 3.0
 STABLE_READS = 2  # Fresh, identical worker states before a decision or press.
 
 
@@ -282,6 +284,8 @@ class Roller:
             return self._stop(problem)
         if not self.focused:
             return self._await_focus(now, self._stop)
+        if self._aiming(now):
+            return Step(message=self.message)
         return self._cycle(current, now)
 
     def _on_resuming(self, mode, cards, now):
@@ -301,6 +305,8 @@ class Roller:
             return self._pause(problem + " Fix it in-game, then Resume.")
         if not self.focused:
             return self._await_focus(now, self._pause)
+        if self._aiming(now):
+            return Step(message=self.message)
         return self._cycle(current, now)
 
     def _on_await_dialog(self, mode, cards, now):
@@ -561,8 +567,22 @@ class Roller:
 
     def _enter(self, phase, now):
         self.phase, self.since = phase, now
+        if phase in ("starting", "resuming"):
+            self.waited_focus, self.focus_at = False, None
+
+    def _aiming(self, now):
+        """True while giving you time to aim after switching into Warframe."""
+        if not self.waited_focus:
+            return False  # started by hotkey from inside the game
+        if self.focus_at is None:
+            self.focus_at = now
+            self.message = (
+                f"Put the pointer on Cycle. Rolling in {AIM_SECONDS:.0f} seconds."
+            )
+        return now - self.focus_at < AIM_SECONDS
 
     def _await_focus(self, now, give_up):
+        self.waited_focus, self.focus_at = True, None
         if now - self.since > TIMEOUTS["focus"]:
             return give_up("Warframe wasn't focused. Click into the game after "
                            "pressing Start or Resume.")

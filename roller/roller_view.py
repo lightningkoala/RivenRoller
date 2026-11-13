@@ -87,6 +87,8 @@ class RollerView(Section):
         self.content.addWidget(self.status)
         self.content.addWidget(
             label(
+                "In Warframe, put the pointer on Cycle and press F8 to start or "
+                "resume; F9 stops. "
                 "Uses the planner's weapon, targets, splice and lock grades. "
                 "Pauses for you to lock or splice. Alt-tab out of Warframe to "
                 "stop instantly. Automated input breaks the Warframe EULA; "

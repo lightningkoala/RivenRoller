@@ -116,6 +116,9 @@ push(screen("current", ingredient))
 assert window.roller.active and Pad.log == ["cross", "cross"]
 assert "Click into Warframe" in window.roller_view.status.text()
 # Focus arrives, then is lost again just before the button goes out.
+import roller as roller_module  # noqa: E402
+
+roller_module.AIM_SECONDS = 0  # skip the "put the pointer on Cycle" wait
 answers = iter([True])
 window.input._focused = lambda: next(answers, False)
 push(screen("current", ingredient))

@@ -14,7 +14,7 @@ import sys
 import threading
 import time
 
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
 
 HOLD_SECONDS = 0.06
 GAP_SECONDS = 0.15
@@ -152,3 +152,38 @@ class InputSender(QObject):
         if self._pad is not None:
             self._pad.close()
             self._pad = None
+
+
+HOTKEYS = {"go": 0x77, "stop": 0x78}  # F8 start/resume, F9 stop (virtual keys)
+
+
+class Hotkeys(QObject):
+    """F8/F9 anywhere, so a run can start with the pointer already on Cycle.
+
+    Polls the two keys' state; it installs no keyboard hook.
+    """
+
+    go = Signal()
+    stop = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._down = {name: False for name in HOTKEYS}
+        self._state = None
+        if sys.platform == "win32":
+            import ctypes
+
+            self._state = ctypes.WinDLL("user32").GetAsyncKeyState
+            self._state.restype = ctypes.c_short
+            self._timer = QTimer(self)
+            self._timer.setInterval(40)
+            self._timer.timeout.connect(self.poll)
+            self._timer.start()
+
+    def poll(self, read=None):
+        read = read or (lambda key: bool(self._state(key) & 0x8000))
+        for name, key in HOTKEYS.items():
+            down = read(key)
+            if down and not self._down[name]:
+                getattr(self, name).emit()
+            self._down[name] = down

@@ -60,6 +60,24 @@ class StandaloneTests(unittest.TestCase):
         out = tracker.update({"cards": [], "mode": "unknown"}, 2.1)
         self.assertEqual(out["mode"], "hover")
 
+    def test_hotkeys_fire_once_per_press(self):
+        from gamepad import HOTKEYS, Hotkeys
+        keys = Hotkeys()
+        fired = []
+        keys.go.connect(lambda: fired.append("go"))
+        keys.stop.connect(lambda: fired.append("stop"))
+        held = set()
+        read = lambda key: key in held
+        keys.poll(read)
+        held.add(HOTKEYS["go"])
+        keys.poll(read)
+        keys.poll(read)  # still held: no repeat
+        held.clear()
+        keys.poll(read)
+        held.add(HOTKEYS["stop"])
+        keys.poll(read)
+        self.assertEqual(fired, ["go", "stop"])
+
     def test_engine_matches_upstream_manifest(self):
         manifest = json.loads((ROOT / "engine/MANIFEST.json").read_text())
         for relative, digest in manifest["files"].items():

@@ -22,8 +22,8 @@ so your plans carry over.
 See **[GUIDE.md](GUIDE.md)** for installation, the first-run check, a full
 worked example and troubleshooting. In short (Windows): install 64-bit Python
 3.13 or 3.14, double-click **Launch RivenRoller.cmd**, press **Start OCR**, set
-the plan in the planner, open the Riven's Cycle screen with the cursor on
-**Cycle**, press **Start rolling** and click into Warframe.
+the plan in the planner, open the Riven's Cycle screen, put the pointer on
+**Cycle** and press **F8** (F9 stops).
 
 ## How a run works
 

@@ -232,12 +232,28 @@ class ThingsGoingWrong(unittest.TestCase):
         game, roller, junk = self.setup(settings={"maxRolls": 1})
         game.focused = False
 
+        first_press = []
+
         def click_in(tick, game):
             if tick == 50:  # five seconds after pressing Start
                 game.focused = True
+            if game.presses and not first_press:
+                first_press.append(tick)
         play(game, roller, on_tick=click_in)
+        # Three seconds to put the pointer on Cycle after switching back.
+        self.assertGreaterEqual(first_press[0], 50 + 29)
         self.assertEqual(game.rolls, 1)
         self.assertIn("1-roll limit", roller.message)
+
+    def test_hotkey_start_inside_warframe_presses_without_delay(self):
+        game, roller, junk = self.setup(settings={"maxRolls": 1})
+        first_press = []
+
+        def watch(tick, game):
+            if game.presses and not first_press:
+                first_press.append(tick)
+        play(game, roller, on_tick=watch)
+        self.assertLessEqual(first_press[0], 4)
 
     def test_start_gives_up_if_warframe_never_focused(self):
         game, roller, junk = self.setup()

@@ -98,11 +98,10 @@ confirm), change it here.
 Use a Riven you don't care about.
 
 1. Set **Stop after rolls** to **2**.
-2. In Warframe, open the Riven's cycle screen. Using your real controller,
-   move the cursor onto **Cycle**, then put the controller down.
-3. In RivenRoller, press **Start rolling**, then click back into Warframe.
-   The roller only presses buttons while Warframe is the focused window. It
-   shows "Click into Warframe to begin" and waits up to 20 seconds for you.
+2. In Warframe, open the Riven's cycle screen and put the pointer on the
+   **Cycle** button (with the mouse or your controller), then leave it there.
+3. Press **F8**. That starts the roller without leaving the game, so the
+   pointer stays on Cycle. (**F9** stops it.)
 4. Watch two rolls. Each should go: Cycle → Yes → new card appears →
    **left (old) card** selected → confirmed → back on the Cycle screen.
 5. It should then stop with "Reached the 2-roll limit".
@@ -111,12 +110,22 @@ If it stops early, the status line says why:
 
 | Message | Likely fix |
 |---|---|
-| "The Cycle press didn't open the confirmation dialog" | Cursor wasn't on Cycle, or Cross isn't the right button. Fix the *Cycle* binding |
+| "The Cycle press didn't open the confirmation dialog" | The pointer wasn't on Cycle (start with F8, not the button), Warframe ignored the virtual controller (disconnect your real one, toggle Steam Input), or Cross isn't the right button |
 | "No verified new roll appeared" | The Yes press didn't land. Fix *Confirm Yes* |
 | "A different card was kept than intended" | L1 isn't selecting the left card. Fix *Keep current* |
-| "Warframe isn't the focused window (focused: …)" | Click into Warframe after pressing Start |
+| "Warframe isn't the focused window (focused: …)" | Start with F8 from inside Warframe |
 
 Once two rolls go through cleanly, raise the limit.
+
+### Why F8 instead of the Start button
+
+Warframe's cursor is the pointer itself. Clicking **Start rolling** in
+RivenRoller moves the pointer off the Cycle button, so the first press would
+land somewhere else. F8 avoids that. The buttons still work: after you press
+one, switch back to Warframe (Alt+Tab is safer than clicking, since a click
+lands in the game), and you get three seconds to put the pointer on Cycle
+before it rolls. F8 does nothing while the RivenRoller window is the active
+one.
 
 ## 6. The two ways to handle a wanted roll
 
@@ -143,23 +152,21 @@ Planner: weapon Boar; format 3 positives + negative; positives Multishot, Fire
 Rate, Ammo Efficiency; negative Impact; lock on Multishot; pick your splice
 grade and lock grade.
 
-1. Open the cycle screen, cursor on Cycle. Press **Start rolling**, click into
-   Warframe.
+1. Open the cycle screen, put the pointer on Cycle and press **F8**.
 2. **It rolls for an ingredient.** Ammo Efficiency on a shotgun splices from
    Magazine Capacity + Reload Speed, or Weapon Recoil + Ammo Maximum. It rolls
    until any one of those appears at your splice grade.
    - *Pause:* "Keep the NEW roll yourself. Found +Magazine Capacity at S. Lock
      it, then Resume…"
    - **You:** select the new card, lock Magazine Capacity in-game, get back to
-     the Cycle screen with the cursor on Cycle, press **Resume**, click into
-     Warframe.
+     the Cycle screen, put the pointer on Cycle and press **F8** to resume.
 3. **It rolls for the partner** (Reload Speed here, any grade).
    - *Pause:* "Partner found (…). Splice Ammo Efficiency now, then Resume."
    - **You:** keep the new card, splice in-game, return to the Cycle screen,
-     **Resume**.
+     pointer on Cycle, **F8**.
 4. **It rolls for the lock stat** (Multishot at your lock grade or better).
    - *Pause:* "Found +Multishot at A. Lock it, then Resume…"
-   - **You:** keep the new card, lock Multishot, **Resume**.
+   - **You:** keep the new card, lock Multishot, pointer on Cycle, **F8**.
 5. **It rolls for the final target.** When the whole roll matches it stops:
    "Target roll found after N rolls." Keep the new card. Done.
 
@@ -179,11 +186,12 @@ and the roller stops, but that stat is gone. Lock before you resume.
 
 ### Stopping it
 
+- Press **F9**.
 - **Alt-tab** out of Warframe: it stops before the next button press.
 - Press **Stop** in the panel.
 - Press **Pause OCR**.
 
-To continue after any stop, press **Start rolling** again. On *Auto* it works
+To continue after any stop, put the pointer on Cycle and press **F8** again. On *Auto* it works
 out the stage from the card and asks you to confirm any stat that needs to be
 locked.
 

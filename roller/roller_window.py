@@ -6,7 +6,7 @@
 import time
 import traceback
 
-from gamepad import GamepadUnavailable, InputSender
+from gamepad import GamepadUnavailable, Hotkeys, InputSender
 from roller import Roller
 from roller_view import RollerView
 from window import MainWindow
@@ -29,6 +29,11 @@ class RollerWindow(MainWindow):
         )
         self.input = InputSender(self)
         self.input.finished.connect(self.input_finished)
+        self.hotkeys = Hotkeys(self)
+        self.hotkeys.go.connect(self.hotkey_go)
+        self.hotkeys.stop.connect(
+            lambda: self.stop_roller("Stopped by you (F9).", quiet=True)
+        )
         # The planner sits in a wrapper column that ends with a stretch.
         column = self.planner.parentWidget().layout()
         column.insertSpacing(column.count() - 1, 8)
@@ -82,6 +87,15 @@ class RollerWindow(MainWindow):
             return
         self.roller = Roller(self.catalog, self.state, self.store.state)
         self.apply_roll_step(self.roller.start(time.monotonic()))
+
+    def hotkey_go(self):
+        """F8: start, or resume when paused. Ignored mid-run and while typing here."""
+        if self._closing or self.isActiveWindow():
+            return
+        if self.roller is not None and self.roller.phase == Roller.PAUSED:
+            self.resume_roller()
+        elif self.roller is None or not self.roller.active:
+            self.start_roller()
 
     def resume_roller(self):
         if self.roller is not None:
