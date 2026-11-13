@@ -130,10 +130,22 @@ class RollerWindow(MainWindow):
                  f"bindings={self.store.state['bindings']}")
         step = self.roller.start(time.monotonic())
         plan = getattr(self.roller, "prefs", self.state)
+        planner = getattr(self.roller, "planner", None)
+        # Each slot lists every accepted stat (first choice plus alternatives).
+        positives = (
+            [list(options) for options in planner.positive_options]
+            if planner
+            else plan.get("positives")
+        )
+        negatives = (
+            ([t for t in planner.targets(3) if t] if planner.has_negative else [])
+            if planner
+            else plan.get("negative")
+        )
         self.log(
             "plan: format={} positives={} negative={} lock={} lockGrade={} "
             "spliceGrade={} | roller: {}".format(
-                plan.get("format"), plan.get("positives"), plan.get("negative"),
+                plan.get("format"), positives, negatives,
                 plan.get("lock"), plan.get("lockGrade"), plan.get("spliceGrade"),
                 {k: v for k, v in self.store.state.items() if k not in ("bindings", "open")},
             )
