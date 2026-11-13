@@ -163,6 +163,34 @@ class ThingsGoingWrong(unittest.TestCase):
         self.assertIn("different card", roller.message)
         self.assertEqual(game.rolls, 1)
 
+    def test_ignored_presses_are_repeated_once(self):
+        # Press order per roll: cycle, yes, l1, cross, yes. Drop a mid-run Cycle
+        # (index 5) and, separately, the Confirm after L1 (index 3).
+        for dropped, extra in ((5, 1), (3, 2)):
+            game, roller, junk = self.setup(settings={"maxRolls": 3},
+                                            drop_presses={dropped})
+            play(game, roller)
+            self.assertIn("3-roll limit", roller.message, dropped)
+            self.assertEqual(game.rolls, 3)
+            self.assertEqual(len(game.presses), 15 + extra)
+            self.assertEqual(game.current, junk)  # every roll kept the old card
+
+    def test_slow_ocr_on_new_roll_waits_instead_of_stopping(self):
+        # Unreadable for 4 s: RivenLens' warning fires, then the card clears up.
+        game, roller, junk = self.setup(settings={"maxRolls": 1},
+                                        scripted=[self.junk2], unreadable_frames=40)
+        play(game, roller)
+        self.assertIn("1-roll limit", roller.message)
+        self.assertEqual(game.current, junk)
+
+    def test_started_on_the_comparison_screen(self):
+        game, roller, junk = self.setup()
+        game.new, game.screen = self.junk2(game), "compare"
+        play(game, roller)
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("Two cards are on screen", roller.message)
+        self.assertEqual(game.presses, [])
+
     def test_out_of_kuva_stops(self):
         game, roller, junk = self.setup(kuva_rolls=0)
         play(game, roller)

@@ -56,9 +56,12 @@ TIMEOUTS = {
 }
 # After you switch back into Warframe, time to put the pointer on Cycle.
 AIM_SECONDS = 3.0
-# Warframe uses the first controller press after mouse use just to switch to
-# controller mode. If Cycle visibly did nothing, press it once more.
+# A press can be ignored: Warframe uses the first controller press after mouse
+# use just to switch to controller mode, and occasionally drops one right after
+# a screen change. If a press visibly did nothing, repeat it (twice at most).
 WAKE_RETRY_SECONDS = 1.2
+KEEP_RETRY_SECONDS = 2.5
+PRESS_RETRIES = 2
 STABLE_READS = 2  # Fresh, identical worker states before a decision or press.
 
 
@@ -156,9 +159,10 @@ class Roller:
         self.stage = None
         self.rolls = 0
         self.sending = False
+        self.warned = False
         self.focused = True
         self.after = None
-        self.keep_confirmed = False
+        self.keep_confirmed, self.keep_retried, self.keep_action = False, 0, None
         self.settled, self.settled_key = 0, None
         self._enter("starting", now)
         self.message = "Open the Riven's Cycle screen in Warframe."
@@ -201,10 +205,10 @@ class Roller:
         if state.get("error"):
             return self._stop("Capture error: " + str(state["error"]))
         if state.get("newRollWarning"):
-            return self._stop(
-                "OCR couldn't read the new roll cleanly. Check it yourself; "
-                "the roller won't discard a roll it can't read."
-            )
+            # RivenLens raises this after about a second of unclear reads. Most
+            # cards clear up a few seconds later, so keep waiting for two
+            # agreeing complete reads; nothing is decided until then.
+            self.warned = True
         mode = state.get("mode")
         if mode in ("hover", "inspection"):
             return self._stop("Left the Riven cycle screen.")
@@ -214,6 +218,11 @@ class Roller:
 
     def _on_starting(self, mode, cards, now):
         current = self._settled_current(mode, cards)
+        if current is None and (mode == "comparison" or "new" in cards):
+            return self._stop(
+                "Two cards are on screen. Choose one in-game first, then start "
+                "from the Cycle screen."
+            )
         if current is None:
             return self._timeout(now, "start", "No verified card on the Cycle screen.")
         graded = self._grade(current, strict=False)
@@ -314,11 +323,11 @@ class Roller:
 
     def _on_await_dialog(self, mode, cards, now):
         if mode == "transition":
-            self.wake_retry = False
+            self.wake_retry = 0
             self._enter("await_roll", now)
             return self._press("confirmYes")
         if mode == "comparison":
-            self.wake_retry = False
+            self.wake_retry = 0
             self._enter("await_roll", now)
             return self._on_await_roll(mode, cards, now)
         current = self._fresh_current(mode, cards)
@@ -328,9 +337,10 @@ class Roller:
             and key(current) == self.previous_key
             and now - self.since > WAKE_RETRY_SECONDS
         ):
-            # Only on the first Cycle after Start/Resume, and only while the
-            # unchanged Cycle screen is still being read.
-            self.wake_retry = False
+            # Once per roll, and only while the unchanged Cycle screen is still
+            # being read (so no dialog has opened).
+            self.wake_retry -= 1
+            self.message = "Cycle didn't register; pressing it again."
             return self._press("cycle")
         return self._timeout(
             now, "dialog", "The Cycle press didn't open the confirmation dialog."
@@ -363,7 +373,14 @@ class Roller:
                 return self._decide(new, now)
         else:
             self.stable, self.stable_key, self.compared = 0, None, False
-        return self._timeout(now, "roll", "No verified new roll appeared.")
+        return self._timeout(
+            now,
+            "roll",
+            "OCR couldn't read the new roll cleanly. Check it yourself; the roller "
+            "won't discard a roll it can't read."
+            if self.warned
+            else "No verified new roll appeared.",
+        )
 
     def _on_await_current(self, mode, cards, now):
         if mode == "transition":
@@ -373,6 +390,17 @@ class Roller:
                 self.keep_confirmed = True
                 return self._press("confirmYes")
             return self._timeout(now, "settle", "The keep dialog didn't close.")
+        if (
+            mode == "comparison"
+            and not self.keep_confirmed
+            and self.keep_retried < PRESS_RETRIES
+            and self.keep_action == "keepOld"
+            and now - self.since > KEEP_RETRY_SECONDS
+        ):
+            # Still on the comparison screen with no dialog: the press was
+            # ignored. Selecting the left card again is harmless if it already is.
+            self.keep_retried += 1
+            return self._press("keepOld")
         current = self._settled_current(mode, cards)
         if current is not None:
             if key(current) != self.expected_key:
@@ -571,6 +599,7 @@ class Roller:
         self.rolls += 1
         self.previous_key = key(current)
         self.stable, self.stable_key, self.compared = 0, None, False
+        self.wake_retry, self.warned = PRESS_RETRIES, False
         self._enter("await_dialog", now)
         self.message = f"Rolling ({STAGE_LABELS[self.stage].lower()}), roll {self.rolls}."
         return self._press("cycle")
@@ -578,7 +607,7 @@ class Roller:
     def _keep(self, action, expected, outcome, now):
         self.expected_key = expected
         self.after = outcome
-        self.keep_confirmed = False
+        self.keep_confirmed, self.keep_retried, self.keep_action = False, 0, action
         self.settled, self.settled_key = 0, None
         self._enter("await_current", now)
         return self._press(action)
@@ -595,7 +624,7 @@ class Roller:
         self.phase, self.since = phase, now
         if phase in ("starting", "resuming"):
             self.waited_focus, self.focus_at = False, None
-            self.wake_retry = True
+            self.wake_retry = PRESS_RETRIES
 
     def _aiming(self, now):
         """True while giving you time to aim after switching into Warframe."""

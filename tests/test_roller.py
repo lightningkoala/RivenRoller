@@ -220,9 +220,14 @@ class RollerTests(unittest.TestCase):
         game = Game(roller, self.junk())
         game.start()
         game.feed(screen("transition", game.current))
-        step = game.feed(screen("comparison", game.current,
-                                newRollWarning={"id": "1", "message": "x"}))
+        for _ in range(250):  # waits for a clean read, then gives up
+            step = game.feed(screen("comparison", game.current,
+                                    newRollWarning={"id": "1", "message": "x"}))
+            if step.event:
+                break
         self.assertEqual(step.event, "stopped")
+        self.assertIn("OCR", step.message)
+        self.assertEqual(game.pressed, [("cross",), ("cross",)])
         # No dialog after Cycle.
         roller = self.roller()
         game = Game(roller, self.junk())
