@@ -416,8 +416,12 @@ class Roller:
                 self.compared = True
             if self.stable >= STABLE_READS and self.compared:
                 return self._decide(new, now)
-        else:
+        elif mode in ("current", "transition"):
+            # Left the comparison screen: start counting again.
             self.stable, self.stable_key, self.compared = 0, None, False
+        # Otherwise this frame just didn't complete (the reader is re-checking
+        # a line). Agreeing reads either side of it still count; a read with
+        # different values changes the card's identity and restarts the count.
         return self._timeout(
             now,
             "roll",

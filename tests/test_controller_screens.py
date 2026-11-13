@@ -77,6 +77,22 @@ class OcrCorrections(unittest.TestCase):
             self.assertEqual(fix_text(text), text)
 
 
+    def test_faction_multiplier_prefix(self):
+        from ocr_fixes import fix_text
+        for seen, meant in (
+            ("XL .49 DAMAGE TO CORPUS", "x1.49 DAMAGE TO CORPUS"),
+            ("XL .55 DAMAGE TO INFESTED", "x1.55 DAMAGE TO INFESTED"),
+            ("XO.57 DAMAGE TO GRINEER", "x0.57 DAMAGE TO GRINEER"),
+            ("0.58 DAMAGE TO INFESTED", "x0.58 DAMAGE TO INFESTED"),
+            ("O 0.63 DAMAGE TO INFESTED", "O x0.63 DAMAGE TO INFESTED"),
+        ):
+            self.assertEqual(fix_text(seen), meant)
+        for text in ("x1.49 Damage to Corpus", "1.48X DAMAGE TO GRINEER",
+                     "X 1.49 DAMAGE TO CORPUS", "+10.58 DAMAGE", "-160.9% DAMAGE",
+                     "+202.7% DAMAGE", "x2 for Heavy Attacks"):
+            self.assertEqual(fix_text(text), text)
+
+
 def card(title, x, complete=True, screen_x=-1):
     return {"weapon": "Boar", "title": title, "format": "2p0n", "complete": complete,
             "rank": 8, "rankMode": "manual", "variantHint": None, "screenX": screen_x,

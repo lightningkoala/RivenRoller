@@ -413,6 +413,16 @@ class ThingsGoingWrong(unittest.TestCase):
         self.assertEqual(roller.phase, "paused")
         self.assertIn("Reload Speed", roller.message)
 
+    def test_new_card_that_reads_cleanly_only_now_and_then(self):
+        # As logged: two faction-multiplier lines kept the card flickering
+        # between read and "waiting for a confirming read" for 16 seconds.
+        game, roller, junk = self.setup(settings={"maxRolls": 3},
+                                        hidden_labels=True, new_card_flickers=True)
+        play(game, roller)
+        self.assertIn("3-roll limit", roller.message)
+        self.assertEqual(game.rolls, 3)
+        self.assertEqual(game.current, junk)
+
     def test_wanted_roll_found_with_alternating_frames(self):
         game, roller, junk = self.setup(scripted=[self.ingredient],
                                         hidden_labels=True, skip_old_every=2)

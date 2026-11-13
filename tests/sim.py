@@ -19,7 +19,7 @@ class SimGame:
                  confirm_keep=True, kuva_rolls=10**9, default_cursor="new",
                  drop_presses=(), unreadable_frames=0, scripted=None,
                  mouse_mode=False, hidden_labels=False, skip_old_every=0,
-                 old_card_unreadable=False):
+                 old_card_unreadable=False, new_card_flickers=False):
         self.catalog, self.weapon = catalog, weapon
         self.variant = {**weapon["variants"][0]}
         self.name = self.variant["name"]
@@ -54,6 +54,8 @@ class SimGame:
         self.compare_frames = 0
         # The dim left card on the comparison screen never completes.
         self.old_card_unreadable = old_card_unreadable
+        # The new card completes on two frames, then only on isolated ones.
+        self.new_card_flickers = new_card_flickers
 
     # ----------------------------------------------------------- cards
 
@@ -163,6 +165,7 @@ class SimGame:
         self.rolls += 1
         self.new = self.scripted.pop(0) if self.scripted else self.random_roll()
         self.screen, self.wait, self.cursor = "rolling", 6, None
+        self.compare_frames = 0
         self.unreadable_left = self.unreadable_frames
 
     def _kept(self, which):
@@ -198,6 +201,8 @@ class SimGame:
         if self.unreadable_left > 0:
             self.unreadable_left -= 1
         self.compare_frames += 1
+        if self.new_card_flickers:
+            readable = self.compare_frames in (1, 2) or self.compare_frames % 7 == 2
         cards = [shown(self.current, 0.3, not self.old_card_unreadable),
                  shown(self.new, 0.7, readable)]
         if self.skip_old_every and self.compare_frames % self.skip_old_every:
