@@ -17,7 +17,7 @@ import copy
 from dataclasses import dataclass
 
 from alerts import final_target_matches, meets_grade
-from catalog import recipes, spliced_trait
+from catalog import SPLICE_IDS, recipes, spliced_trait
 from grading import FORMATS, GRADE_NAMES, grade_stat, grading_rank
 from planner import Planner
 from tracker import key
@@ -45,6 +45,9 @@ DEFAULTS = {
     # Off (default): a wanted roll pauses on the comparison screen and you pick
     # the new card yourself, so a missed button press can never discard it.
     "autoKeepNew": False,
+    # On: the lock stage accepts any of the plan's target positives at the lock
+    # grade, not only the stat marked as the lock in the planner.
+    "anyTargetLock": False,
     "open": True,
 }
 TIMEOUTS = {
@@ -87,7 +90,7 @@ def roller_settings(saved):
         result["finalGrade"] = saved["finalGrade"]
     if saved.get("startStage") in STAGES:
         result["startStage"] = saved["startStage"]
-    for flag in ("open", "autoKeepNew"):
+    for flag in ("open", "autoKeepNew", "anyTargetLock"):
         if type(saved.get(flag)) is bool:
             result[flag] = saved[flag]
     return result
@@ -130,6 +133,20 @@ class Roller:
         self.lock = self.planner.lock_target
         if self.lock and self.lock["id"] == self.splice:
             self.lock = None
+        # Stats the lock stage may stop on. The first one found becomes the lock.
+        self.lock_candidates = [self.lock] if self.lock else []
+        if self.settings["anyTargetLock"]:
+            for identity in self.prefs["positives"]:
+                candidate = {"id": identity, "polarity": "positive"}
+                if (
+                    identity not in SPLICE_IDS
+                    and identity != "any"
+                    and self.planner.is_rollable(identity, "positive")
+                    and candidate not in self.lock_candidates
+                ):
+                    self.lock_candidates.append(candidate)
+            if len(self.lock_candidates) > 1:
+                self.lock = None  # decided by what rolls first
         traits = self.weapon["family"]["traits"]
 
         def rollable(identity):
@@ -257,28 +274,37 @@ class Roller:
                     )
                 else:
                     stage = "ingredient"
-            elif self.lock and not self._has(
-                graded, self.lock["id"], self.lock["polarity"], self.prefs["lockGrade"]
-            ):
+            elif self.lock_candidates and not self._lock_on_card(graded):
                 stage = "lock"
             else:
                 stage = "final"
-                if self.lock:
+                found = self._lock_on_card(graded)
+                if found:
+                    self._choose_lock(found[0])
                     confirm = (
                         f"The card already has {self._signed(self.lock)}. Make sure "
                         "it's locked, then Resume to roll for the final target."
                     )
         if stage in ("ingredient", "partner") and not self.splice:
             return self._stop("The plan has no splice; pick a later start stage.")
-        if stage == "lock" and not self.lock:
+        if stage == "lock" and not self.lock_candidates:
             return self._stop("The plan has no manual lock; pick another start stage.")
-        if stage == "lock" and not self.planner.is_rollable(
-            self.lock["id"], self.lock["polarity"]
+        if stage == "lock" and not any(
+            self.planner.is_rollable(c["id"], c["polarity"])
+            for c in self.lock_candidates
         ):
             return self._stop(
-                f"{self._signed(self.lock)} can't roll on {self.weapon['name']}, "
+                f"{self._lock_names()} can't roll on {self.weapon['name']}, "
                 "so the roller can't find it."
             )
+        if stage == "final" and self.lock is None and self.lock_candidates:
+            found = self._lock_on_card(graded, held=True)
+            if not found:
+                return self._stop(
+                    f"None of {self._lock_names()} is on the card to hold for the "
+                    "final stage."
+                )
+            self._choose_lock(found[0])
         if stage == "partner" and self.locked_ingredient is None:
             held = [
                 (stat, grade)
@@ -530,11 +556,10 @@ class Roller:
     def _match_lock(self, card, graded):
         if card["format"] != self.prefs["format"]:
             return None
-        found = self._has(
-            graded, self.lock["id"], self.lock["polarity"], self.prefs["lockGrade"]
-        )
+        found = self._lock_on_card(graded)
         if not found:
             return None
+        self._choose_lock(found[0])
         self.stage = "final"
         return (
             "pause",
@@ -558,7 +583,41 @@ class Roller:
         return ("done", f"Target roll found after {self.rolls} rolls. Roller stopped.")
 
     def _after_splice(self):
-        return "lock" if self.lock else "final"
+        return "lock" if self.lock_candidates else "final"
+
+    def _lock_on_card(self, graded, held=False):
+        """Best lock candidate on the card at the lock grade, as (stat, result)."""
+        found = [
+            hit
+            for candidate in self.lock_candidates
+            if (
+                hit := self._has(
+                    graded,
+                    candidate["id"],
+                    candidate["polarity"],
+                    self.prefs["lockGrade"],
+                    held=held,
+                )
+            )
+        ]
+        found.sort(key=lambda hit: self._grade_index(hit[1]))
+        return found[0] if found else None
+
+    def _choose_lock(self, stat):
+        """Make this stat the held lock for the final stage and its checks."""
+        chosen = {"id": stat["id"], "polarity": stat["polarity"]}
+        if chosen == self.lock:
+            return
+        self.lock = chosen
+        if chosen != self.planner.lock_target and chosen["polarity"] == "positive":
+            # The final check reads the lock from the planner: point a private
+            # copy of the plan at the stat that was actually locked.
+            self.prefs["lock"] = "positive:" + chosen["id"]
+            self.prefs["positiveLockSlot"] = self.prefs["positives"].index(chosen["id"])
+            self.planner = Planner(self.catalog, self.prefs)
+
+    def _lock_names(self):
+        return " / ".join(self._signed(c) for c in self.lock_candidates)
 
     def _completable(self, identity, polarity):
         """Can a partner still roll so that one of the pair is positive?"""
@@ -629,6 +688,10 @@ class Roller:
                 self.prefs["lockGrade"],
                 held=True,
             ):
+                other = self._lock_on_card(graded, held=True)
+                if other:  # you locked a different accepted stat
+                    self._choose_lock(other[0])
+                    return None
                 return (
                     f"{self.name(self.lock['id'])} at {self.prefs['lockGrade']} or "
                     "better isn't on the card. Is it locked?"

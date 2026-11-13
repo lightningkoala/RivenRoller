@@ -72,6 +72,16 @@ class RollerView(Section):
         self.auto_keep.setChecked(settings["autoKeepNew"])
         self.auto_keep.toggled.connect(self.save)
         self.content.addWidget(self.auto_keep)
+        self.any_lock = QCheckBox("Lock stage: accept any target positive")
+        self.any_lock.setToolTip(
+            "Off: the lock stage looks only for the stat marked as the lock in "
+            "the planner. On: it stops on any of the plan's target positives "
+            "(not the spliced one) at the lock grade, and that stat becomes the "
+            "lock for the final stage."
+        )
+        self.any_lock.setChecked(settings["anyTargetLock"])
+        self.any_lock.toggled.connect(self.save)
+        self.content.addWidget(self.any_lock)
         buttons, row = box(False, spacing=6)
         self.start = QPushButton("Start rolling")
         self.start.setObjectName("primary")
@@ -116,6 +126,7 @@ class RollerView(Section):
                 "finalGrade": self.final_grade.currentData(),
                 "startStage": self.stage.currentData(),
                 "autoKeepNew": self.auto_keep.isChecked(),
+                "anyTargetLock": self.any_lock.isChecked(),
                 "open": self.opened,
             }
         )
@@ -135,6 +146,7 @@ class RollerView(Section):
             self.final_grade,
             self.max_rolls,
             self.auto_keep,
+            self.any_lock,
             *self.bindings.values(),
         ):
             widget.setEnabled(not running and phase != "paused")

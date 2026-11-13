@@ -137,6 +137,90 @@ class FullRuns(unittest.TestCase):
         self.assert_target(game, prefs)
 
 
+MIRE = dict(positives=["status-damage", "melee-damage", "critical-chance"],
+            lock="positive:critical-chance", lock_slot=2)
+
+
+class EitherLock(unittest.TestCase):
+    """Mire: Status Damage + Melee Damage + Critical Chance, lock whichever
+    of Melee Damage / Critical Chance rolls at the lock grade first."""
+
+    def spliced(self, game):
+        return game.card([("status-damage", 9.8), ("range", 0), ("puncture", 0)])
+
+    def start(self, new_roll, **settings):
+        prefs = plan("Mire", lock_grade="S", **MIRE)
+        game = SimGame(CATALOG, weapon("Mire"), seed=1)
+        game.current = self.spliced(game)
+        game.spliced = ("status-damage", 9.8)
+        game.scripted = [new_roll(game)]
+        roller = Roller(CATALOG, prefs, {"maxRolls": 1, **settings})
+        play(game, roller)
+        return game, roller
+
+    @staticmethod
+    def melee_s(game):
+        return game.card([("status-damage", 9.8), ("melee-damage", 9.8), ("range", 0)])
+
+    @staticmethod
+    def crit_s(game):
+        return game.card([("status-damage", 9.8), ("critical-chance", 9.8), ("range", 0)])
+
+    def test_planner_lock_only_by_default(self):
+        game, roller = self.start(self.melee_s)
+        self.assertIn("1-roll limit", roller.message)  # passed over
+        game, roller = self.start(self.crit_s)
+        self.assertEqual(roller.phase, "paused")
+        self.assertIn("+Critical Chance", roller.message)
+
+    def test_either_stat_pauses_when_enabled(self):
+        for roll, name in ((self.melee_s, "+Melee Damage"), (self.crit_s, "+Critical Chance")):
+            game, roller = self.start(roll, anyTargetLock=True)
+            self.assertEqual(roller.phase, "paused", roller.message)
+            self.assertIn(name, roller.message)
+            self.assertEqual(roller.stage, "final")
+            self.assertEqual(roller.planner.lock_target, roller.lock)
+
+    def test_grade_still_applies(self):
+        weak = lambda game: game.card(
+            [("status-damage", 9.8), ("melee-damage", 5), ("critical-chance", 5)])
+        game, roller = self.start(weak, anyTargetLock=True)
+        self.assertIn("1-roll limit", roller.message)
+
+    def test_full_runs_finish_with_whichever_was_locked(self):
+        locked = set()
+        for seed in range(6):
+            prefs = plan("Mire", lock_grade="A", **MIRE)
+            game = SimGame(CATALOG, weapon("Mire"), seed=seed, mouse_mode=True)
+            roller = Roller(CATALOG, prefs, {"maxRolls": 10000, "anyTargetLock": True})
+            play(game, roller, helpful_player(game, roller))
+            self.assertEqual(roller.phase, "done", roller.message)
+            self.assertEqual(ids(game.current, "positive"), set(prefs["positives"]))
+            self.assertEqual(game.current["format"], "3p0n")
+            locked.add(game.locked[0])
+        self.assertEqual(locked, {"melee-damage", "critical-chance"})
+
+    def test_locking_the_other_accepted_stat_is_fine(self):
+        # Both roll at S; the roller names one, the player locks the other.
+        both = lambda game: game.card(
+            [("status-damage", 9.8), ("melee-damage", 9.9), ("critical-chance", 9.7)])
+        prefs = plan("Mire", lock_grade="S", **MIRE)
+        game = SimGame(CATALOG, weapon("Mire"), seed=2)
+        game.current, game.spliced = self.spliced(game), ("status-damage", 9.8)
+        game.scripted = [both(game)]
+        roller = Roller(CATALOG, prefs, {"maxRolls": 10000, "anyTargetLock": True})
+
+        def player(event, message):
+            if game.screen == "compare":
+                game.player_keeps("new")
+            if event == "paused" and not game.locked:
+                game.lock("critical-chance", "positive")
+            return event == "paused"
+        play(game, roller, player)
+        self.assertEqual(roller.phase, "done", roller.message)
+        self.assertEqual(roller.lock["id"], "critical-chance")
+
+
 class ThingsGoingWrong(unittest.TestCase):
     def setup(self, settings=None, scripted=None, prefs=None, name="Boar", **options):
         prefs = prefs or plan(name, **BOAR)

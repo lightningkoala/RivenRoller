@@ -76,6 +76,7 @@ The **Auto roller** panel adds:
 | **Final positives** | Optional minimum grade for the *other* positives on the final roll (not the locked or spliced ones, which have their own grades) |
 | **Stop after rolls** | Hard limit for one run. Start low |
 | **Pick wanted rolls automatically** | Off by default. See [section 6](#6-the-two-ways-to-handle-a-wanted-roll) |
+| **Lock stage: accept any target positive** | Off: the lock stage looks only for the stat marked as the lock in the planner. On: it pauses on any of your target positives (except the spliced one) at the lock grade, and whichever you lock is held for the final stage |
 | **Bindings** | Which buttons to press for each action. See below |
 
 ### Button bindings
