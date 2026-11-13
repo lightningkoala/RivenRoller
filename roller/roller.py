@@ -339,20 +339,30 @@ class Roller:
     def _on_await_roll(self, mode, cards, now):
         new = cards.get("new")
         if (
-            mode == "comparison"
+            mode in ("comparison", "unknown")
             and new
             and not new.get("snapshot")
             and new.get("complete") is True
         ):
             # The tracker had no new card when Cycle was pressed, so this is the
             # new roll even if it happens to display the same stats as before.
+            #
+            # RivenLens re-reads the dim left card only every 0.75 s. On the
+            # frames in between it reads the new card alone, and with the
+            # controller cursor on the Confirm label that frame has no screen
+            # type. So count agreeing reads of the new card across both kinds of
+            # frame, and require the comparison screen to have been seen once.
             identity = key(new)
-            self.stable = self.stable + 1 if identity == self.stable_key else 1
+            if identity != self.stable_key:
+                self.stable, self.compared = 0, False
+            self.stable += 1
             self.stable_key = identity
-            if self.stable >= STABLE_READS:
+            if mode == "comparison":
+                self.compared = True
+            if self.stable >= STABLE_READS and self.compared:
                 return self._decide(new, now)
         else:
-            self.stable, self.stable_key = 0, None
+            self.stable, self.stable_key, self.compared = 0, None, False
         return self._timeout(now, "roll", "No verified new roll appeared.")
 
     def _on_await_current(self, mode, cards, now):
@@ -560,7 +570,7 @@ class Roller:
             )
         self.rolls += 1
         self.previous_key = key(current)
-        self.stable, self.stable_key = 0, None
+        self.stable, self.stable_key, self.compared = 0, None, False
         self._enter("await_dialog", now)
         self.message = f"Rolling ({STAGE_LABELS[self.stage].lower()}), roll {self.rolls}."
         return self._press("cycle")

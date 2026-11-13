@@ -272,6 +272,33 @@ class ThingsGoingWrong(unittest.TestCase):
         self.assertEqual(roller.phase, "done", roller.message)
         self.assertEqual(ids(game.current, "positive"), set(roller.prefs["positives"]))
 
+    def test_old_card_read_only_every_other_frame(self):
+        # As logged on a real run: frames alternate between both cards and the
+        # new card alone, and the hidden Confirm label gives no screen type.
+        for every in (2, 3):
+            game, roller, junk = self.setup(
+                settings={"maxRolls": 3}, scripted=[self.junk2],
+                hidden_labels=True, skip_old_every=every)
+            play(game, roller)
+            self.assertIn("3-roll limit", roller.message, every)
+            self.assertEqual(game.rolls, 3)
+
+    def test_wanted_roll_found_with_alternating_frames(self):
+        game, roller, junk = self.setup(scripted=[self.ingredient],
+                                        hidden_labels=True, skip_old_every=2)
+        play(game, roller)
+        self.assertEqual(roller.phase, "paused")
+        self.assertIn("Reload Speed", roller.message)
+
+    def test_full_run_with_alternating_frames(self):
+        prefs = plan("Boar", **BOAR)
+        game = SimGame(CATALOG, weapon("Boar"), seed=3, mouse_mode=True,
+                       hidden_labels=True, skip_old_every=2)
+        roller = Roller(CATALOG, prefs, {"maxRolls": 10000})
+        play(game, roller, helpful_player(game, roller))
+        self.assertEqual(roller.phase, "done", roller.message)
+        self.assertEqual(ids(game.current, "positive"), set(roller.prefs["positives"]))
+
     def test_start_gives_up_if_warframe_never_focused(self):
         game, roller, junk = self.setup()
         game.focused = False
