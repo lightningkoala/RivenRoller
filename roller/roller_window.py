@@ -128,7 +128,17 @@ class RollerWindow(MainWindow):
         self.roller = Roller(self.catalog, self.state, self.store.state)
         self.log(f"--- start: weapon={self.state.get('weapon')} "
                  f"bindings={self.store.state['bindings']}")
-        self.apply_roll_step(self.roller.start(time.monotonic()))
+        step = self.roller.start(time.monotonic())
+        plan = getattr(self.roller, "prefs", self.state)
+        self.log(
+            "plan: format={} positives={} negative={} lock={} lockGrade={} "
+            "spliceGrade={} | roller: {}".format(
+                plan.get("format"), plan.get("positives"), plan.get("negative"),
+                plan.get("lock"), plan.get("lockGrade"), plan.get("spliceGrade"),
+                {k: v for k, v in self.store.state.items() if k not in ("bindings", "open")},
+            )
+        )
+        self.apply_roll_step(step)
 
     def hotkey_go(self):
         """F8: start, or resume when paused. Ignored mid-run and while typing here."""
