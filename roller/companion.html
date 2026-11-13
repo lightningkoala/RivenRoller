@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<meta name="referrer" content="no-referrer">
+<title>RivenRoller</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #131b25; --line: #223042; --text: #e5edf7;
+    --dim: #8b9bb0; --go: #3fb6a8; --you: #f2b63c; --done: #5fd38d; --bad: #ef6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) 14px calc(24px + env(safe-area-inset-bottom));
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  #banner {
+    margin: 14px 0 12px; padding: 16px; border-radius: 14px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-left: 6px solid var(--dim);
+  }
+  #banner[data-kind="rolling"] { border-left-color: var(--go); }
+  #banner[data-kind="paused"] { border-left-color: var(--you); background: #2a2210; }
+  #banner[data-kind="done"] { border-left-color: var(--done); background: #10281b; }
+  #banner[data-kind="stopped"] { border-left-color: var(--bad); background: #2a1414; }
+  #state { font-size: 13px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); }
+  #banner[data-kind="rolling"] #state { color: var(--go); }
+  #banner[data-kind="paused"] #state { color: var(--you); }
+  #banner[data-kind="done"] #state { color: var(--done); }
+  #banner[data-kind="stopped"] #state { color: var(--bad); }
+  #message { margin-top: 6px; font-size: 17px; overflow-wrap: anywhere; }
+  #figures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+  .figure { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+  .figure b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .figure span { font-size: 12px; color: var(--dim); }
+  #plan { color: var(--dim); font-size: 14px; margin: 0 2px 14px; overflow-wrap: anywhere; }
+  h2 { font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--dim); margin: 18px 2px 8px; }
+  .roll { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; margin-bottom: 8px; }
+  .roll.wanted { border-color: var(--done); }
+  .roll header { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; color: var(--dim); margin-bottom: 6px; }
+  .roll header b { color: var(--text); }
+  .roll.wanted header em { color: var(--done); font-style: normal; font-weight: 700; }
+  .stat { display: flex; align-items: baseline; gap: 8px; padding: 2px 0; }
+  .stat .name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .stat .value { color: var(--dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .stat.negative .name { color: #e59a9a; }
+  .grade { min-width: 30px; text-align: center; border-radius: 6px; padding: 1px 6px; font-weight: 700; font-size: 13px; background: #223042; }
+  .grade[data-g^="S"] { background: #3d2f6b; color: #d9c8ff; }
+  .grade[data-g^="A"] { background: #17493f; color: #a4f0de; }
+  .grade[data-g^="B"] { background: #1d3f5e; color: #b0d8ff; }
+  .grade[data-g^="C"] { background: #4a401a; color: #f0dd9a; }
+  #link { position: sticky; top: 0; z-index: 1; display: none; margin: 0 -14px; padding: 8px 14px; background: var(--bad); color: #fff; font-size: 14px; text-align: center; }
+  #link.lost { display: block; }
+  #empty { color: var(--dim); margin: 2px; }
+  footer { color: var(--dim); font-size: 12px; margin: 18px 2px 0; }
+</style>
+</head>
+<body>
+<div id="link" role="status">Not connected to RivenRoller. Retrying…</div>
+<main>
+  <section id="banner" data-kind="idle" aria-live="polite">
+    <div id="state">Connecting</div>
+    <div id="message">Waiting for RivenRoller…</div>
+  </section>
+  <section id="figures">
+    <div class="figure"><b id="rolls">–</b><span id="rollsNote">rolls this run</span></div>
+    <div class="figure"><b id="elapsed">–</b><span>running for</span></div>
+    <div class="figure"><b id="stage">–</b><span>looking for</span></div>
+  </section>
+  <p id="plan"></p>
+  <h2>Rolls seen</h2>
+  <div id="history"><p id="empty">No rolls yet.</p></div>
+  <footer>Read-only view. Lock, splice and Resume happen at your PC.</footer>
+</main>
+<script>
+(function () {
+  "use strict";
+  var key = new URLSearchParams(location.search).get("k") || "";
+  var $ = function (id) { return document.getElementById(id); };
+  var STATES = { idle: "Idle", paused: "Needs you", done: "Target found", stopped: "Stopped" };
+  var SHORT = { ingredient: "Ingredient", partner: "Partner", lock: "Lock stat", final: "Final roll" };
+  var latest = null, lastPhase = null;
+
+  function el(tag, cls, text) {
+    var node = document.createElement(tag);
+    if (cls) node.className = cls;
+    if (text != null) node.textContent = text;
+    return node;
+  }
+
+  function kindOf(phase) { return STATES[phase] ? phase : "rolling"; }
+
+  function clock(seconds) {
+    seconds = Math.max(0, Math.floor(seconds));
+    var h = Math.floor(seconds / 3600), m = Math.floor(seconds % 3600 / 60), s = seconds % 60;
+    return (h ? h + ":" + String(m).padStart(2, "0") : String(m)) + ":" + String(s).padStart(2, "0");
+  }
+
+  function tick() {
+    if (!latest || !latest.startedAt) { $("elapsed").textContent = "–"; return; }
+    var running = kindOf(latest.phase) === "rolling";
+    var end = running ? Date.now() / 1000 : latest.updatedAt;
+    $("elapsed").textContent = clock(end - latest.startedAt);
+  }
+
+  function rollCard(roll) {
+    var card = el("article", "roll" + (roll.wanted ? " wanted" : ""));
+    var head = el("header");
+    var left = el("span");
+    left.appendChild(el("b", null, "Roll " + roll.roll));
+    left.appendChild(document.createTextNode(" · " + (SHORT[roll.stage] || roll.stage || "")));
+    head.appendChild(left);
+    head.appendChild(el("em", null, roll.wanted ? "WANTED" : "skipped"));
+    card.appendChild(head);
+    (roll.stats || []).forEach(function (stat) {
+      var row = el("div", "stat " + stat.polarity);
+      row.appendChild(el("span", "name", (stat.polarity === "negative" ? "− " : "+ ") + stat.name));
+      row.appendChild(el("span", "value", stat.value + (stat.unit || "")));
+      var grade = el("span", "grade", stat.grade || "?");
+      grade.dataset.g = stat.grade || "";
+      row.appendChild(grade);
+      card.appendChild(row);
+    });
+    return card;
+  }
+
+  function render(data) {
+    latest = data;
+    var kind = kindOf(data.phase);
+    $("banner").dataset.kind = kind;
+    $("state").textContent = STATES[data.phase] || "Rolling";
+    $("message").textContent = data.message || "";
+    $("rolls").textContent = data.rolls;
+    $("rollsNote").textContent = data.maxRolls ? "rolls (limit " + data.maxRolls + ")" : "rolls this run";
+    $("stage").textContent = SHORT[data.stage] || "–";
+    var plan = data.plan || {};
+    $("plan").textContent = [plan.weapon, plan.target].filter(Boolean).join(" · ");
+    var list = $("history");
+    list.textContent = "";
+    if (!data.history || !data.history.length) list.appendChild(el("p", null, "No rolls yet.")).id = "empty";
+    (data.history || []).forEach(function (roll) { list.appendChild(rollCard(roll)); });
+    document.title = (kind === "paused" || kind === "done" ? "● " : "") +
+      (STATES[data.phase] || "Rolling " + data.rolls) + " · RivenRoller";
+    if (lastPhase !== null && lastPhase !== data.phase && (kind === "paused" || kind === "done") && navigator.vibrate) {
+      navigator.vibrate([200, 100, 200]);
+    }
+    lastPhase = data.phase;
+    tick();
+  }
+
+  function connect() {
+    var source = new EventSource("/events?k=" + encodeURIComponent(key));
+    source.onopen = function () { $("link").classList.remove("lost"); };
+    source.onmessage = function (event) {
+      $("link").classList.remove("lost");
+      try { render(JSON.parse(event.data)); } catch (e) { /* ignore a bad frame */ }
+    };
+    source.onerror = function () {
+      $("link").classList.add("lost");
+      source.close();
+      setTimeout(connect, 3000);
+    };
+  }
+
+  setInterval(tick, 1000);
+  connect();
+})();
+</script>
+</body>
+</html>

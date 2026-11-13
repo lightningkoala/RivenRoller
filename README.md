@@ -34,6 +34,13 @@ worked example and troubleshooting. In short (Windows): install 64-bit Python
 the plan in the planner, open the Riven's Cycle screen, put the pointer on
 **Cycle** and press **F8** (F9 stops).
 
+## Phone companion
+
+Optional and off by default: a read-only status page for your phone on your
+home Wi-Fi (rolls seen with grades, roll count, current stage), and push
+notifications through ntfy or a Discord webhook when the roller pauses for
+you, finds the target or stops. See section 8 of the guide.
+
 ## How a run works
 
 The plan comes from the planner. It works for every weapon in the catalog and

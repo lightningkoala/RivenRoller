@@ -41,7 +41,7 @@ its own copy of the RivenLens engine and keeps its settings in
    your plans and capture settings are copied over once.
 
 If no window appears, run **Launch RivenRoller (show errors).cmd** and read
-the message. See [Troubleshooting](#8-troubleshooting).
+the message. See [Troubleshooting](#9-troubleshooting).
 
 ## 3. Set up the capture (once)
 
@@ -232,7 +232,53 @@ It stops and plays the warning sound, without choosing a card, when:
 - The roll limit is reached.
 - Warframe loses focus, or capture is paused.
 
-## 8. Troubleshooting
+## 8. Phone companion (optional)
+
+Lets you walk away from the PC: a status page on your phone shows the run, and
+a notification tells you when to come back. It's off until you turn it on in
+the **Phone companion** panel under the Auto roller.
+
+It only reports what the roller already decided. It is read-only: it can't
+start, resume, lock or press anything, and it never touches Warframe.
+
+### Status page (same Wi-Fi)
+
+1. Tick **Show a status page on my home network**. The first time, Windows
+   Firewall asks whether to allow Python: allow it on **Private** networks.
+2. Scan the QR code with your phone's camera, or type the link shown under it.
+   Bookmark it or add it to your home screen; the link stays the same.
+
+The page shows whether the roller is rolling, waiting for you, finished or
+stopped, the roller's message, the roll count, how long it has run, and the
+last 100 rolls with every stat and grade. It updates live while it's open.
+
+The link contains a private key, so other devices on your Wi-Fi can't open the
+page without it. It only works at home, on the same network as the PC.
+
+### Notifications
+
+A web page can't notify you while your phone is locked, so notifications go
+through a push service. You get one when the roller **pauses for you** (lock,
+splice, pick a card), **finds the target**, or **stops on a problem**. Stopping
+it yourself sends nothing. Use either or both:
+
+- **ntfy** (simplest): install the free **ntfy** app (App Store / Google Play).
+  In RivenRoller press **New topic**, then in the app choose *Subscribe to
+  topic* and type the topic exactly as shown. Press **Send test**.
+- **Discord:** in a private server, *Edit Channel → Integrations → Webhooks →
+  New Webhook → Copy Webhook URL*, paste it into the **Discord** box and press
+  **Send test**.
+
+Things to know:
+
+- These messages leave your PC: the roller's status text (for example "Found
+  +Reload Speed at S. Lock it, then Resume") is sent to ntfy.sh or Discord.
+  Nothing else is sent, and nothing at all unless you fill in a box.
+- An ntfy topic works like a password: anyone who knows it can read those
+  messages. Use **New topic** rather than a name you make up.
+- If a notification can't be sent, the run carries on and the panel says why.
+
+## 9. Troubleshooting
 
 **It stops and you want me to look at it.** Send
 `%LOCALAPPDATA%\RivenRoller\logs\roller-run.log`. It records the screens the
@@ -254,7 +300,7 @@ normal launch are also logged to
 **"Install 64-bit Python…" / "Python 3.13 or 3.14 was not found".** Install
 Python from python.org with the py launcher, then launch again.
 
-**"Installing vgamepad failed" or "Couldn't create the virtual controller. Is
+**"Installing vgamepad or segno failed" or "Couldn't create the virtual controller. Is
 ViGEmBus installed?"** The driver didn't install. Install ViGEmBus from its
 official GitHub releases page (nefarius/ViGEmBus), restart, then launch again.
 
@@ -275,10 +321,16 @@ differs, change `GAME_TITLE` near the top of `roller\gamepad.py`.
 or OCR took longer than 12 seconds. Try the other capture method in Settings,
 or raise `"roll"` in `TIMEOUTS` at the top of `roller\roller.py`.
 
+**The phone can't open the status page.** The phone must be on the same Wi-Fi
+as the PC (not mobile data or a guest network). If it still can't connect,
+Windows Firewall is blocking it: allow Python on Private networks, and check
+the Wi-Fi is set to *Private* in Windows' network settings. If the PC's address
+changes, the link in the panel changes with it; scan the code again.
+
 **The roller refuses a splice: "No rollable splice recipe".** That weapon
 can't roll one of the ingredients, so the splice isn't obtainable by rolling.
 
-## 9. Updating and removing
+## 10. Updating and removing
 
 - **New RivenLens release** (new weapons or stat data): download and extract
   it somewhere, then run
