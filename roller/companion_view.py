@@ -3,28 +3,12 @@
 
 """Phone companion controls: the status page link and notification settings."""
 
-import io
-
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QCheckBox, QGridLayout, QLabel, QLineEdit
+from PySide6.QtWidgets import QApplication, QCheckBox, QGridLayout, QLineEdit
 
 from companion import companion_settings, new_topic
 from ui_text import QPushButton
 from widgets import Section, box, label
-
-
-def qr_pixmap(text):
-    """A QR code for the link, or None if the optional 'segno' isn't installed."""
-    try:
-        import segno
-    except ImportError:
-        return None
-    data = io.BytesIO()
-    segno.make(text, error="m").save(data, kind="png", scale=4, border=2)
-    pixmap = QPixmap()
-    pixmap.loadFromData(data.getvalue(), "PNG")
-    return pixmap
 
 
 class CompanionView(Section):
@@ -38,17 +22,23 @@ class CompanionView(Section):
         self.enabled = QCheckBox("Show a status page on my home network")
         self.enabled.setToolTip(
             "Starts a small read-only web page on this PC. Phones on the same "
-            "Wi-Fi can open it with the link below; it can't control anything."
+            "Wi-Fi can open it with the address and code below; it can't "
+            "control anything."
         )
         self.enabled.setChecked(settings["enabled"])
         self.enabled.toggled.connect(self.save)
         self.content.addWidget(self.enabled)
-        self.qr = QLabel()
-        self.qr.setAlignment(Qt.AlignmentFlag.AlignLeft)
-        self.content.addWidget(self.qr)
-        self.link = label("", "note", wrap=True)
+        self.link = label("", "status", wrap=True)
         self.link.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.content.addWidget(self.link)
+        self.copy = QPushButton("Copy link")
+        self.copy.setToolTip(
+            "Copies the page's link with the code already in it, to send to "
+            "your phone yourself (a note or a message to yourself)."
+        )
+        self.copy.clicked.connect(self.copy_link)
+        self.content.addWidget(self.copy)
+        self.full_link = None
         grid = QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
         grid.setHorizontalSpacing(8)
@@ -111,20 +101,24 @@ class CompanionView(Section):
         self.store.state = saved
         self.changed.emit()
 
-    def show_link(self, url, problem=None):
-        pixmap = qr_pixmap(url) if url else None
-        self.qr.setPixmap(pixmap or QPixmap())
-        self.qr.setVisible(bool(pixmap))
+    def copy_link(self):
+        if self.full_link:
+            QApplication.clipboard().setText(self.full_link)
+            self.status.setText("Link copied.")
+
+    def show_link(self, address, code=None, problem=None):
+        self.full_link = f"{address}/?k={code}" if address else None
+        self.copy.setVisible(bool(address))
         if problem:
             self.link.setText(problem)
-        elif url:
+        elif address:
             self.link.setText(
-                ("Scan with your phone (same Wi-Fi), or open: " if pixmap else "Open on your phone (same Wi-Fi): ")
-                + url
+                f"On your phone (same Wi-Fi), open  {address.removeprefix('http://')}  "
+                f"in the browser and enter the code  {code}"
             )
         else:
             self.link.setText("Status page is off.")
-        self.summary.setText("On" if url else "")
+        self.summary.setText("On" if address else "")
         self.refresh()
 
     def show_notify_result(self, problem, pending=False):

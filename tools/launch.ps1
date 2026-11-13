@@ -36,7 +36,7 @@ if (-not (Test-Path -LiteralPath $stamp) -or (Get-Content -LiteralPath $stamp -R
     & $python -m pip install --disable-pip-version-check --require-hashes --only-binary=:all: -r (Join-Path $root 'requirements.txt')
     if ($LASTEXITCODE -ne 0) { throw 'Installing the RivenLens engine dependencies failed.' }
     & $python -m pip install --disable-pip-version-check --require-hashes -r (Join-Path $root 'roller-requirements.txt')
-    if ($LASTEXITCODE -ne 0) { throw 'Installing vgamepad or segno failed.' }
+    if ($LASTEXITCODE -ne 0) { throw 'Installing vgamepad failed.' }
     Set-Content -LiteralPath $stamp -Value $wanted
 }
 

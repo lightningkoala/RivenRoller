@@ -245,15 +245,21 @@ start, resume, lock or press anything, and it never touches Warframe.
 
 1. Tick **Show a status page on my home network**. The first time, Windows
    Firewall asks whether to allow Python: allow it on **Private** networks.
-2. Scan the QR code with your phone's camera, or type the link shown under it.
-   Bookmark it or add it to your home screen; the link stays the same.
+2. On your phone, open the browser and type the address the panel shows (for
+   example `192.168.1.23:8765`), then enter the 6-character code next to it.
+   Capital or small letters both work. The phone remembers the code, so
+   bookmark the page or add it to your home screen and next time it just opens.
+
+Prefer not to type? **Copy link** copies the address with the code already in
+it; send it to your phone any way you like (a note or a message to yourself).
 
 The page shows whether the roller is rolling, waiting for you, finished or
 stopped, the roller's message, the roll count, how long it has run, and the
 last 100 rolls with every stat and grade. It updates live while it's open.
 
-The link contains a private key, so other devices on your Wi-Fi can't open the
-page without it. It only works at home, on the same network as the PC.
+Other devices on your Wi-Fi can't see the run without the code, and a device
+that enters five wrong codes is ignored for a minute. The page only works at
+home, on the same network as the PC.
 
 ### Notifications
 
@@ -300,7 +306,7 @@ normal launch are also logged to
 **"Install 64-bit Python…" / "Python 3.13 or 3.14 was not found".** Install
 Python from python.org with the py launcher, then launch again.
 
-**"Installing vgamepad or segno failed" or "Couldn't create the virtual controller. Is
+**"Installing vgamepad failed" or "Couldn't create the virtual controller. Is
 ViGEmBus installed?"** The driver didn't install. Install ViGEmBus from its
 official GitHub releases page (nefarius/ViGEmBus), restart, then launch again.
 
@@ -325,7 +331,8 @@ or raise `"roll"` in `TIMEOUTS` at the top of `roller\roller.py`.
 as the PC (not mobile data or a guest network). If it still can't connect,
 Windows Firewall is blocking it: allow Python on Private networks, and check
 the Wi-Fi is set to *Private* in Windows' network settings. If the PC's address
-changes, the link in the panel changes with it; scan the code again.
+changes (routers sometimes hand out a new one), the address in the panel
+changes with it: type the new one; the code stays the same.
 
 **The roller refuses a splice: "No rollable splice recipe".** That weapon
 can't roll one of the ingredients, so the splice isn't obtainable by rolling.

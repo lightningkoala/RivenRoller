@@ -17,6 +17,7 @@ import json
 import os
 import secrets
 import socket
+import sys
 import tempfile
 import threading
 import time
@@ -29,6 +30,13 @@ PAGE = Path(__file__).with_name("companion.html")
 DEFAULT_PORT = 8765
 PORT_TRIES = 10  # the next ports are tried if the first is taken
 HISTORY = 100  # rolls kept for the phone page
+# The code you type on the phone: no look-alike characters (0/O, 1/I).
+CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+CODE_LENGTH = 6
+# A device that sends this many wrong codes is ignored for a while, so the
+# short code can't be guessed by trying them all.
+WRONG_CODE_LIMIT = 5
+LOCKOUT_SECONDS = 60
 KEEPALIVE_SECONDS = 15
 NTFY_SERVER = "https://ntfy.sh"
 DEFAULTS = {
@@ -54,10 +62,10 @@ def companion_settings(saved):
     if type(port) is int and 1024 <= port <= 65535:
         result["port"] = port
     token = saved.get("token")
-    if isinstance(token, str) and 16 <= len(token) <= 64 and _plain(token):
+    if isinstance(token, str) and CODE_LENGTH <= len(token) <= 64 and _plain(token):
         result["token"] = token
     else:
-        result["token"] = secrets.token_urlsafe(16)
+        result["token"] = new_code()
     topic = saved.get("ntfyTopic")
     if isinstance(topic, str) and len(topic) <= 64 and _plain(topic):
         result["ntfyTopic"] = topic
@@ -78,6 +86,10 @@ def companion_settings(saved):
 
 def _plain(text):
     return all(c.isascii() and (c.isalnum() or c in "-_") for c in text)
+
+
+def new_code():
+    return "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
 
 
 def new_topic():
@@ -173,16 +185,18 @@ class _Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         hub = self.server.hub
         url = urlsplit(self.path)
-        given = parse_qs(url.query).get("k", [""])[0]
-        if not hmac.compare_digest(given.encode(), hub.token.encode()):
-            return self._send(403, "text/plain", b"Open the link from RivenRoller.")
         if url.path == "/":
+            # The page itself holds no run data; it asks for the code.
             return self._send(200, "text/html; charset=utf-8", PAGE.read_bytes())
+        if url.path not in ("/state", "/events"):
+            return self._send(404, "text/plain", b"Not found.")
+        given = parse_qs(url.query).get("k", [""])[0]
+        verdict = hub.check(self.client_address[0], given)
+        if verdict != 200:
+            return self._send(verdict, "text/plain", b"Enter the code from RivenRoller.")
         if url.path == "/state":
             return self._send(200, "application/json", hub.payload()[1])
-        if url.path == "/events":
-            return self._events(hub)
-        return self._send(404, "text/plain", b"Not found.")
+        return self._events(hub)
 
     def _send(self, status, kind, body):
         self.send_response(status)
@@ -219,6 +233,11 @@ class _Server(ThreadingHTTPServer):
     daemon_threads = True
     allow_reuse_address = False
 
+    def handle_error(self, request, client_address):
+        # A phone dropping the connection (screen locked, tab closed) is normal.
+        if not isinstance(sys.exc_info()[1], OSError):
+            super().handle_error(request, client_address)
+
 
 class Companion:
     """Serves the page and pushes each published state to connected phones."""
@@ -229,6 +248,7 @@ class Companion:
         self._changed = threading.Condition()
         self._version = 0
         self._body = b"{}"
+        self._wrong = {}  # device address -> times of recent wrong codes
         self.server = None
         last = None
         for candidate in [port] if port == 0 else range(port, port + PORT_TRIES):
@@ -245,8 +265,30 @@ class Companion:
             target=self.server.serve_forever, name="companion", daemon=True
         ).start()
 
+    def address(self, address=None):
+        """What to type into the phone's browser."""
+        return f"http://{address or lan_address()}:{self.port}"
+
     def url(self, address=None):
-        return f"http://{address or lan_address()}:{self.port}/?k={self.token}"
+        """The same page with the code filled in, for copying to the phone."""
+        return f"{self.address(address)}/?k={self.token}"
+
+    def check(self, device, given, now=None):
+        """200 for the right code, 403 for a wrong one, 429 while locked out."""
+        now = time.monotonic() if now is None else now
+        with self._changed:
+            recent = [t for t in self._wrong.get(device, []) if now - t < LOCKOUT_SECONDS]
+            if len(recent) >= WRONG_CODE_LIMIT:
+                self._wrong[device] = recent
+                return 429
+            given = given.strip().upper().encode("utf-8", "replace")
+            if hmac.compare_digest(given, self.token.upper().encode()):
+                self._wrong.pop(device, None)
+                return 200
+            if len(self._wrong) > 256:  # never grows without bound
+                self._wrong.clear()
+            self._wrong[device] = recent + [now]
+            return 403
 
     def publish(self, data):
         body = json.dumps(data, separators=(",", ":")).encode("utf-8")

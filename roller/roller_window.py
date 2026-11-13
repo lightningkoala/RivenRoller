@@ -136,10 +136,15 @@ class RollerWindow(MainWindow):
             try:
                 self.companion = Companion(settings["token"], settings["port"])
             except OSError as exc:
-                self.companion_view.show_link(None, f"Couldn't start the page: {exc}")
+                self.companion_view.show_link(
+                    None, problem=f"Couldn't start the page: {exc}"
+                )
                 return
             self.publish_companion()
-        self.companion_view.show_link(self.companion.url() if self.companion else None)
+        if self.companion is None:
+            self.companion_view.show_link(None)
+        else:
+            self.companion_view.show_link(self.companion.address(), self.companion.token)
 
     def publish_companion(self):
         roller = self.roller

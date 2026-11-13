@@ -120,7 +120,12 @@ window.notifier.opener = lambda request: notified.append(request)
 window.companion_store.state["port"] = free_port
 window.companion_view.topic.setText("rivenroller-test")
 window.companion_view.enabled.setChecked(True)  # as ticked by the user
-assert window.companion is not None and "?k=" in window.companion_view.link.text()
+assert window.companion is not None
+shown = window.companion_view.link.text()
+assert f":{free_port}" in shown and window.companion.token in shown, shown
+assert len(window.companion.token) == 6
+window.companion_view.copy_link()
+assert QApplication.clipboard().text() == window.companion.url()
 assert (directory / "companion.json").is_file()
 
 

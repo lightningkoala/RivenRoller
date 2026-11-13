@@ -58,10 +58,35 @@
   #link.lost { display: block; }
   #empty { color: var(--dim); margin: 2px; }
   footer { color: var(--dim); font-size: 12px; margin: 18px 2px 0; }
+  #pair { display: none; margin: 18vh auto 0; max-width: 360px; text-align: center; }
+  #pair h1 { font-size: 22px; margin: 0 0 6px; }
+  #pair p { color: var(--dim); margin: 0 0 18px; }
+  #code {
+    width: 100%; padding: 14px; border-radius: 12px; border: 1px solid var(--line);
+    background: var(--panel); color: var(--text); text-align: center;
+    font: 700 28px/1 ui-monospace, Menlo, Consolas, monospace; letter-spacing: .25em;
+    text-transform: uppercase;
+  }
+  #code:focus { outline: 2px solid var(--go); outline-offset: 2px; }
+  #pair button {
+    width: 100%; margin-top: 12px; padding: 14px; border: 0; border-radius: 12px;
+    background: var(--go); color: #04201d; font: 700 17px system-ui, sans-serif;
+  }
+  #pairError { color: var(--bad); min-height: 1.4em; margin-top: 12px; }
+  body.pairing #pair { display: block; }
+  body.pairing main, body.pairing #link { display: none; }
 </style>
 </head>
 <body>
 <div id="link" role="status">Not connected to RivenRoller. Retrying…</div>
+<form id="pair" autocomplete="off">
+  <h1>RivenRoller</h1>
+  <p>Enter the code shown in RivenRoller's Phone companion panel.</p>
+  <input id="code" name="code" aria-label="Code" maxlength="64" inputmode="text"
+         autocapitalize="characters" autocorrect="off" spellcheck="false" required>
+  <button type="submit">Connect</button>
+  <div id="pairError" role="alert"></div>
+</form>
 <main>
   <section id="banner" data-kind="idle" aria-live="polite">
     <div id="state">Connecting</div>
@@ -80,7 +105,41 @@
 <script>
 (function () {
   "use strict";
-  var key = new URLSearchParams(location.search).get("k") || "";
+  var STORE = "rivenroller-code";
+  var key = new URLSearchParams(location.search).get("k") || recall();
+  var source = null;
+
+  function recall() {
+    try { return localStorage.getItem(STORE) || ""; } catch (e) { return ""; }
+  }
+
+  function remember(code) {
+    try { localStorage.setItem(STORE, code); } catch (e) { /* private mode */ }
+    try { history.replaceState(null, "", "/?k=" + encodeURIComponent(code)); } catch (e) {}
+  }
+
+  function askCode(problem) {
+    if (source) { source.close(); source = null; }
+    document.body.classList.add("pairing");
+    $("pairError").textContent = problem || "";
+    $("code").focus();
+  }
+
+  // Check a code before using it: 200 right, 403 wrong, 429 too many tries.
+  function tryCode(code, offline) {
+    fetch("/state?k=" + encodeURIComponent(code), { cache: "no-store" }).then(function (reply) {
+      if (reply.status === 200) {
+        key = code;
+        remember(code);
+        document.body.classList.remove("pairing");
+        connect();
+      } else if (reply.status === 429) {
+        askCode("Too many wrong codes. Wait a minute, then try again.");
+      } else {
+        askCode(code ? "That code isn't right. Check the panel in RivenRoller." : "");
+      }
+    }).catch(offline);
+  }
   var $ = function (id) { return document.getElementById(id); };
   var STATES = { idle: "Idle", paused: "Needs you", done: "Target found", stopped: "Stopped" };
   var SHORT = { ingredient: "Ingredient", partner: "Partner", lock: "Lock stat", final: "Final roll" };
@@ -153,22 +212,37 @@
     tick();
   }
 
+  function retry() {
+    $("link").classList.add("lost");
+    setTimeout(function () { tryCode(key, retry); }, 3000);
+  }
+
   function connect() {
-    var source = new EventSource("/events?k=" + encodeURIComponent(key));
+    if (source) source.close();
+    source = new EventSource("/events?k=" + encodeURIComponent(key));
     source.onopen = function () { $("link").classList.remove("lost"); };
     source.onmessage = function (event) {
       $("link").classList.remove("lost");
       try { render(JSON.parse(event.data)); } catch (e) { /* ignore a bad frame */ }
     };
     source.onerror = function () {
-      $("link").classList.add("lost");
+      // Either RivenRoller is unreachable, or the code no longer works.
       source.close();
-      setTimeout(connect, 3000);
+      source = null;
+      retry();
     };
   }
 
+  $("pair").addEventListener("submit", function (event) {
+    event.preventDefault();
+    var code = $("code").value.trim().toUpperCase();
+    if (!code) return;
+    $("pairError").textContent = "";
+    tryCode(code, function () { askCode("Can't reach RivenRoller. Same Wi-Fi as the PC?"); });
+  });
+
   setInterval(tick, 1000);
-  connect();
+  if (key) tryCode(key, retry); else askCode("");
 })();
 </script>
 </body>

@@ -28,7 +28,9 @@ class SettingsTests(unittest.TestCase):
         first, second = companion_settings(None), companion_settings({})
         self.assertFalse(first["enabled"])
         self.assertEqual((first["ntfyTopic"], first["discordWebhook"]), ("", ""))
-        self.assertGreaterEqual(len(first["token"]), 16)
+        self.assertEqual(len(first["token"]), companion.CODE_LENGTH)
+        self.assertTrue(set(first["token"]) <= set(companion.CODE_ALPHABET))
+        self.assertFalse(set("01IO") & set(companion.CODE_ALPHABET))
         self.assertNotEqual(first["token"], second["token"])
 
     def test_malformed_values_fall_back(self):
@@ -80,12 +82,47 @@ class ServerTests(unittest.TestCase):
         with urllib.request.urlopen(url, timeout=5) as response:
             return response.read()
 
-    def test_needs_the_token(self):
-        for key in ("", "wrong", TOKEN[:-1]):
-            for path in ("/", "/state", "/events"):
+    def test_run_data_needs_the_code(self):
+        self.hub.publish({"phase": "paused", "message": "secret roll"})
+        for key in ("", "wrong"):
+            for path in ("/state", "/events"):
                 with self.assertRaises(urllib.error.HTTPError) as caught:
                     self.get(path, key)
                 self.assertEqual(caught.exception.code, 403)
+        # The page itself opens without a code (it asks for one) and holds no data.
+        page = self.get("/", "")
+        self.assertIn(b'id="pair"', page)
+        self.assertNotIn(b"secret roll", page)
+
+    def test_typed_code_ignores_case_and_spaces(self):
+        hub = Companion("QX7MPA", port=0, host="127.0.0.1")
+        self.addCleanup(hub.close)
+        self.assertEqual(hub.check("phone", " qx7mpa "), 200)
+        self.assertEqual(hub.check("phone", "QX7MPB"), 403)
+        self.assertEqual(hub.address("192.168.1.23"), f"http://192.168.1.23:{hub.port}")
+        self.assertEqual(hub.url("192.168.1.23"), f"http://192.168.1.23:{hub.port}/?k=QX7MPA")
+
+    def test_wrong_codes_lock_out_only_that_device(self):
+        limit, wait = companion.WRONG_CODE_LIMIT, companion.LOCKOUT_SECONDS
+        for attempt in range(limit):
+            self.assertEqual(self.hub.check("guesser", "NOPE", now=attempt), 403)
+        # Locked out: even the right code is refused, so guessing can't succeed.
+        self.assertEqual(self.hub.check("guesser", TOKEN, now=limit), 429)
+        self.assertEqual(self.hub.check("phone", TOKEN, now=limit), 200)
+        self.assertEqual(self.hub.check("guesser", TOKEN, now=wait + limit), 200)
+        # A right code clears earlier slips.
+        for attempt in range(limit - 1):
+            self.hub.check("phone", "typo", now=200 + attempt)
+        self.assertEqual(self.hub.check("phone", TOKEN, now=210), 200)
+        self.assertEqual(self.hub.check("phone", "typo", now=211), 403)
+
+    def test_lockout_over_http(self):
+        for _ in range(companion.WRONG_CODE_LIMIT):
+            with self.assertRaises(urllib.error.HTTPError):
+                self.get("/state", "wrong")
+        with self.assertRaises(urllib.error.HTTPError) as caught:
+            self.get("/state")
+        self.assertEqual(caught.exception.code, 429)
 
     def test_serves_page_and_state(self):
         self.hub.publish({"phase": "paused", "rolls": 12})
