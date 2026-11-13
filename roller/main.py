@@ -31,6 +31,10 @@ import screen_modes  # noqa: E402
 
 screen_modes.install()
 
+import ocr_fixes  # noqa: E402
+
+ocr_fixes.install()
+
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtGui import QColor, QFont, QIcon, QPalette  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402

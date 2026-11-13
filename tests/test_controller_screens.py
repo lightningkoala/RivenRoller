@@ -61,6 +61,22 @@ class ControllerScreens(unittest.TestCase):
         self.assertEqual(MODE(lines("+12% Damage to Grineer", "NO")), "unknown")
 
 
+class OcrCorrections(unittest.TestCase):
+    def test_whole_second_combo_duration(self):
+        from ocr_fixes import fix_text
+        from parser import VALUE
+        fixed = fix_text("+1 OS COMBO DURATION")  # as Windows OCR read "+10s"
+        self.assertEqual(fixed, "+10S COMBO DURATION")
+        match = VALUE.search(fixed.lower())
+        self.assertEqual((match["value"], match["unit"]), ("10", "s"))
+        self.assertEqual(fix_text("+1OS COMBO DURATION"), "+10S COMBO DURATION")
+        # Nothing else is touched.
+        for text in ("+9.5S COMBO DURATION", "+9.1 S COMBO DURATION",
+                     "+1 OS INITIAL COMBO", "+67.5% ADDITIONAL COMBO",
+                     "O -100.5% SLASH", "+30.2 INITIAL COMBO"):
+            self.assertEqual(fix_text(text), text)
+
+
 def card(title, x, complete=True, screen_x=-1):
     return {"weapon": "Boar", "title": title, "format": "2p0n", "complete": complete,
             "rank": 8, "rankMode": "manual", "variantHint": None, "screenX": screen_x,

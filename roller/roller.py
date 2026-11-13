@@ -159,6 +159,7 @@ class Roller:
         self.stage = None
         self.rolls = 0
         self.sending = False
+        self.decision = ""
         self.warned = False
         self.focused = True
         self.after = None
@@ -429,7 +430,25 @@ class Roller:
         problem = self._held_problem(graded)
         if problem:
             return self._stop(problem)
-        outcome = getattr(self, "_match_" + self.stage)(new, graded)
+        stage = self.stage
+        outcome = getattr(self, "_match_" + stage)(new, graded)
+        # One line per decided roll for the run log: what was read and why.
+        self.decision = "roll {} [{}] {} {}: {} -> {}".format(
+            self.rolls,
+            stage,
+            new.get("title", "?"),
+            new.get("format", "?"),
+            ", ".join(
+                "{} {}{} {}".format(
+                    self._signed(stat),
+                    stat["value"],
+                    stat.get("unit", ""),
+                    result.get("grade", "?"),
+                )
+                for stat, result in graded
+            ),
+            "WANTED" if outcome else "keep current",
+        )
         if outcome is None:
             return self._keep("keepOld", self.previous_key, None, now)
         if self.settings["autoKeepNew"]:

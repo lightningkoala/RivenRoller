@@ -21,6 +21,7 @@ class RollerWindow(MainWindow):
         super().__init__(preferences, worker_factory)
         self.run_log = preferences.directory / "logs" / "roller-run.log"
         self._seen = None
+        self._logged_decision = ""
         self.setWindowTitle("RivenRoller")
         self.store = store
         self.roller = None
@@ -84,8 +85,9 @@ class RollerWindow(MainWindow):
         """Append to a small local log of what the roller saw and pressed."""
         try:
             self.run_log.parent.mkdir(parents=True, exist_ok=True)
-            if self.run_log.exists() and self.run_log.stat().st_size > 512 * 1024:
-                self.run_log.unlink()
+            if self.run_log.exists() and self.run_log.stat().st_size > 1024 * 1024:
+                # Keep the previous file, so the end of a long run isn't lost.
+                self.run_log.replace(self.run_log.with_name("roller-run.old.log"))
             with open(self.run_log, "a", encoding="utf-8") as file:
                 file.write(f"{time.strftime('%H:%M:%S')} {text}\n")
         except OSError:
@@ -156,6 +158,10 @@ class RollerWindow(MainWindow):
             self.apply_roll_step(self.roller.stop(problem))
 
     def apply_roll_step(self, step, quiet=False):
+        decision = getattr(self.roller, "decision", "")
+        if decision and decision != self._logged_decision:
+            self._logged_decision = decision
+            self.log(decision)
         if step.buttons:
             self.log(f"press {' '.join(step.buttons)} (phase={self.roller.phase})")
             self.input.send(step.buttons)
