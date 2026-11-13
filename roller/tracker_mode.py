@@ -72,11 +72,13 @@ class ModeTracker(RollTracker):
             result.get("mode", "unknown") == "unknown"
             and self.view_mode != "hover"
             and len(raw) == 2
-            and all(card.get("complete") for card in raw)
             and raw[0].get("weapon") == raw[1].get("weapon")
         ):
-            # Two readable cards of one weapon side by side is the comparison
-            # screen, even when the controller cursor covers its Confirm label.
+            # Two cards of one weapon side by side is the comparison screen,
+            # even when the controller cursor covers its Confirm label. The dim
+            # left card often takes several reads to complete; that doesn't
+            # change which screen this is (and incomplete cards are still never
+            # accepted as readings).
             result = {**result, "mode": "comparison"}
         published = super().update(result, now)
         mode = result.get("mode", "unknown")

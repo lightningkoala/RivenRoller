@@ -54,6 +54,9 @@ class ControllerScreens(unittest.TestCase):
 
     def test_other_screens_unchanged(self):
         self.assertEqual(MODE(lines(*CARD, "CONFIRM")), "comparison")
+        for partial in ("CON", "CONF", "CONFI"):  # cursor over the label
+            self.assertEqual(MODE(lines(*CARD, partial)), "comparison", partial)
+        self.assertEqual(MODE(lines(*CARD, "CONTROLLER CONNECTED")), "unknown")
         self.assertEqual(MODE(lines(*CARD)), "unknown")
         self.assertEqual(MODE(lines("+12% Damage to Grineer", "NO")), "unknown")
 
@@ -108,9 +111,17 @@ class HiddenButtonLabel(unittest.TestCase):
         tracker = ModeTracker()
         out = tracker.update({"cards": [card("old", 960)], "mode": "unknown"}, 0.1)
         self.assertEqual(out["mode"], "unknown")
-        out = tracker.update({"cards": [card("old", 610), card("new", 960, False)],
-                              "mode": "unknown"}, 0.2)
+        other = {**card("new", 960), "weapon": "Sobek"}
+        out = tracker.update({"cards": [card("old", 610), other], "mode": "unknown"}, 0.2)
         self.assertEqual(out["mode"], "unknown")
+
+    def test_incomplete_old_card_is_still_the_comparison_screen(self):
+        tracker = ModeTracker()
+        for tick in range(1, 4):
+            out = tracker.update({"cards": [card("old", 610, False), card("new", 960)],
+                                  "mode": "unknown"}, tick / 10)
+        self.assertEqual(out["mode"], "comparison")
+        self.assertEqual(self.slots(out), {"new": ("new", False)})
 
 
 if __name__ == "__main__":

@@ -18,7 +18,8 @@ class SimGame:
     def __init__(self, catalog, weapon, *, seed=1, confirm_cycle=True,
                  confirm_keep=True, kuva_rolls=10**9, default_cursor="new",
                  drop_presses=(), unreadable_frames=0, scripted=None,
-                 mouse_mode=False, hidden_labels=False, skip_old_every=0):
+                 mouse_mode=False, hidden_labels=False, skip_old_every=0,
+                 old_card_unreadable=False):
         self.catalog, self.weapon = catalog, weapon
         self.variant = {**weapon["variants"][0]}
         self.name = self.variant["name"]
@@ -51,6 +52,8 @@ class SimGame:
         # it), and the reader re-reads the dim old card only on some frames.
         self.hidden_labels, self.skip_old_every = hidden_labels, skip_old_every
         self.compare_frames = 0
+        # The dim left card on the comparison screen never completes.
+        self.old_card_unreadable = old_card_unreadable
 
     # ----------------------------------------------------------- cards
 
@@ -194,7 +197,8 @@ class SimGame:
         if self.unreadable_left > 0:
             self.unreadable_left -= 1
         self.compare_frames += 1
-        cards = [shown(self.current, 0.3), shown(self.new, 0.7, readable)]
+        cards = [shown(self.current, 0.3, not self.old_card_unreadable),
+                 shown(self.new, 0.7, readable)]
         if self.skip_old_every and self.compare_frames % self.skip_old_every:
             cards = cards[1:]
         seen = "unknown" if self.hidden_labels else "comparison"

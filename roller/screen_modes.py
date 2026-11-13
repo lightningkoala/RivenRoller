@@ -23,7 +23,9 @@ NO = re.compile(r"^\W*(?:[A-Z0-9]{1,2}\W+|[XO0Q@C]\W*)?NO\W*$")
 YES_NO = re.compile(r"^.{0,6}\bYES\b.{0,12}\bNO\W*$")
 DIALOG = re.compile(r"ARE YOU SURE YOU WANT TO CYCLE|INTO CURRENT SELECTION")
 CYCLE = re.compile(r"\bCYCLE\s+FOR\b|\bREMAINING\s*KUVA\b")
-CONFIRM = re.compile(r"^\W*CONFIRM\W*$")
+# The controller cursor sits on the middle of the label, so OCR often reads
+# only its start: "CON", "CONF", "CONFI".
+CONFIRM = re.compile(r"^\W*CON(?:F(?:I(?:R(?:M)?)?)?)?\W*$")
 
 
 def _same_row(first, second):

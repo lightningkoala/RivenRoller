@@ -283,6 +283,21 @@ class ThingsGoingWrong(unittest.TestCase):
             self.assertIn("3-roll limit", roller.message, every)
             self.assertEqual(game.rolls, 3)
 
+    def test_dim_old_card_never_fully_read(self):
+        # As logged: the old card stayed "waiting for a confirming read" and the
+        # Confirm label was hidden, so no frame had two complete cards.
+        game, roller, junk = self.setup(
+            settings={"maxRolls": 3}, scripted=[self.junk2],
+            hidden_labels=True, old_card_unreadable=True)
+        play(game, roller)
+        self.assertIn("3-roll limit", roller.message)
+        self.assertEqual(game.rolls, 3)
+        game, roller, junk = self.setup(scripted=[self.ingredient],
+                                        hidden_labels=True, old_card_unreadable=True)
+        play(game, roller)
+        self.assertEqual(roller.phase, "paused")
+        self.assertIn("Reload Speed", roller.message)
+
     def test_wanted_roll_found_with_alternating_frames(self):
         game, roller, junk = self.setup(scripted=[self.ingredient],
                                         hidden_labels=True, skip_old_every=2)

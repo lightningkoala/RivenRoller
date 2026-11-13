@@ -49,7 +49,7 @@ DEFAULTS = {
 }
 TIMEOUTS = {
     "dialog": 4.0,  # Cycle press -> YES/NO dialog
-    "roll": 12.0,  # YES press -> verified new card on the comparison screen
+    "roll": 20.0,  # YES press -> verified new card on the comparison screen
     "settle": 6.0,  # keep press -> verified kept card on the Cycle screen
     "start": 6.0,  # start/resume -> verified card on the Cycle screen
     "focus": 20.0,  # start/resume -> you clicking back into Warframe
