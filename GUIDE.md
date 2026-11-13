@@ -117,6 +117,12 @@ If it stops early, the status line says why:
 
 Once two rolls go through cleanly, raise the limit.
 
+You don't need a real controller. Position the pointer with the mouse and
+press F8. Warframe uses the first controller press after mouse use just to
+switch to controller mode (the prompts change to PlayStation icons), so if
+Cycle visibly did nothing, the roller presses it once more about a second
+later. Expect that short pause at the start and after each Resume.
+
 ### Why F8 instead of the Start button
 
 Warframe's cursor is the pointer itself. Clicking **Start rolling** in

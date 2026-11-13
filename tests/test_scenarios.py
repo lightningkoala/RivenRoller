@@ -255,6 +255,23 @@ class ThingsGoingWrong(unittest.TestCase):
         play(game, roller, on_tick=watch)
         self.assertLessEqual(first_press[0], 4)
 
+    def test_first_press_swallowed_by_mouse_to_controller_switch(self):
+        game, roller, junk = self.setup(settings={"maxRolls": 3}, mouse_mode=True)
+        play(game, roller)
+        self.assertIn("3-roll limit", roller.message)
+        self.assertEqual(game.rolls, 3)
+        # One extra Cycle press at the start, none afterwards.
+        self.assertEqual(game.presses[:3], ["cross", "cross", "cross"])
+        self.assertEqual(len(game.presses), 1 + 3 * 5)
+
+    def test_full_run_with_mouse_between_every_pause(self):
+        prefs = plan("Boar", **BOAR)
+        game = SimGame(CATALOG, weapon("Boar"), seed=3, mouse_mode=True)
+        roller = Roller(CATALOG, prefs, {"maxRolls": 10000})
+        play(game, roller, helpful_player(game, roller))
+        self.assertEqual(roller.phase, "done", roller.message)
+        self.assertEqual(ids(game.current, "positive"), set(roller.prefs["positives"]))
+
     def test_start_gives_up_if_warframe_never_focused(self):
         game, roller, junk = self.setup()
         game.focused = False

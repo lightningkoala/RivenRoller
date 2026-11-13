@@ -17,7 +17,8 @@ TICK = 0.1
 class SimGame:
     def __init__(self, catalog, weapon, *, seed=1, confirm_cycle=True,
                  confirm_keep=True, kuva_rolls=10**9, default_cursor="new",
-                 drop_presses=(), unreadable_frames=0, scripted=None):
+                 drop_presses=(), unreadable_frames=0, scripted=None,
+                 mouse_mode=False):
         self.catalog, self.weapon = catalog, weapon
         self.variant = {**weapon["variants"][0]}
         self.name = self.variant["name"]
@@ -44,6 +45,8 @@ class SimGame:
         self.screen, self.wait, self.cursor = "cycle", 0, None
         self.presses, self.rolls, self.focused = [], 0, True
         self.unreadable_left = 0
+        # After mouse use, the first controller press only switches input mode.
+        self.mouse_mode = self.uses_mouse = mouse_mode
 
     # ----------------------------------------------------------- cards
 
@@ -111,6 +114,7 @@ class SimGame:
 
     def player_keeps(self, which):
         assert self.screen == "compare"
+        self.mouse_mode = self.uses_mouse
         self._kept(which)
 
     # ----------------------------------------------------------- input
@@ -119,6 +123,9 @@ class SimGame:
         index = len(self.presses)
         self.presses.append(button)
         if index in self.drop_presses or not self.focused:
+            return
+        if self.mouse_mode:
+            self.mouse_mode = False
             return
         if self.screen == "cycle" and button == "cross":
             if self.kuva_rolls <= 0:

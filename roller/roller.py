@@ -56,6 +56,9 @@ TIMEOUTS = {
 }
 # After you switch back into Warframe, time to put the pointer on Cycle.
 AIM_SECONDS = 3.0
+# Warframe uses the first controller press after mouse use just to switch to
+# controller mode. If Cycle visibly did nothing, press it once more.
+WAKE_RETRY_SECONDS = 1.2
 STABLE_READS = 2  # Fresh, identical worker states before a decision or press.
 
 
@@ -311,11 +314,24 @@ class Roller:
 
     def _on_await_dialog(self, mode, cards, now):
         if mode == "transition":
+            self.wake_retry = False
             self._enter("await_roll", now)
             return self._press("confirmYes")
         if mode == "comparison":
+            self.wake_retry = False
             self._enter("await_roll", now)
             return self._on_await_roll(mode, cards, now)
+        current = self._fresh_current(mode, cards)
+        if (
+            self.wake_retry
+            and current is not None
+            and key(current) == self.previous_key
+            and now - self.since > WAKE_RETRY_SECONDS
+        ):
+            # Only on the first Cycle after Start/Resume, and only while the
+            # unchanged Cycle screen is still being read.
+            self.wake_retry = False
+            return self._press("cycle")
         return self._timeout(
             now, "dialog", "The Cycle press didn't open the confirmation dialog."
         )
@@ -569,6 +585,7 @@ class Roller:
         self.phase, self.since = phase, now
         if phase in ("starting", "resuming"):
             self.waited_focus, self.focus_at = False, None
+            self.wake_retry = True
 
     def _aiming(self, now):
         """True while giving you time to aim after switching into Warframe."""
