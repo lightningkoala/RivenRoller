@@ -6,6 +6,8 @@
 import time
 import traceback
 
+import screen_modes
+
 from gamepad import GamepadUnavailable, Hotkeys, InputSender
 from roller import Roller
 from roller_view import RollerView
@@ -99,7 +101,7 @@ class RollerWindow(MainWindow):
             self._seen = seen
             self.log(
                 f"screen={seen[0]} cards=[{cards}] ocr={seen[3]} phase={seen[2]} "
-                f"focused={self.input.focused()}"
+                f"focused={self.input.focused()} text={list(screen_modes.last_texts)}"
             )
 
     def start_roller(self):

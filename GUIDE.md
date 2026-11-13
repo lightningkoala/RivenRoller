@@ -123,6 +123,11 @@ switch to controller mode (the prompts change to PlayStation icons), so if
 Cycle visibly did nothing, the roller presses it once more about a second
 later. Expect that short pause at the start and after each Resume.
 
+The pointer stays on the same spot for the whole run: Warframe's **Confirm**
+button on the comparison screen sits exactly where **Cycle** was, so Cross
+works on both. On the comparison screen the new roll is selected by default;
+the roller presses L1 to select your current one before confirming.
+
 ### Why F8 instead of the Start button
 
 Warframe's cursor is the pointer itself. Clicking **Start rolling** in
@@ -214,6 +219,11 @@ It stops and plays the warning sound, without choosing a card, when:
 - Warframe loses focus, or capture is paused.
 
 ## 8. Troubleshooting
+
+**It stops and you want me to look at it.** Send
+`%LOCALAPPDATA%\RivenRoller\logs\roller-run.log`. It records the screens the
+roller recognised, the short text lines OCR read on them, and each button it
+pressed.
 
 **Nothing opens.** Run *Launch RivenRoller (show errors).cmd*. Errors from a
 normal launch are also logged to

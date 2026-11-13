@@ -27,6 +27,10 @@ import tracker_mode  # noqa: E402
 
 tracker_mode.install()
 
+import screen_modes  # noqa: E402
+
+screen_modes.install()
+
 from PySide6.QtCore import QTimer  # noqa: E402
 from PySide6.QtGui import QColor, QFont, QIcon, QPalette  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMessageBox  # noqa: E402
