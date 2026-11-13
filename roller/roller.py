@@ -398,10 +398,16 @@ class Roller:
             and self.keep_action == "keepOld"
             and now - self.since > KEEP_RETRY_SECONDS
         ):
-            # Still on the comparison screen with no dialog: the press was
-            # ignored. Selecting the left card again is harmless if it already is.
+            # Still on the comparison screen with no dialog. A real run showed
+            # what happens here: the select press (L1) registers, the Confirm
+            # right after it is dropped, and L1 is a toggle, so sending the whole
+            # sequence again selects the NEW card. Repeat only the Confirm.
             self.keep_retried += 1
-            return self._press("keepOld")
+            self.sending = True
+            return Step(
+                buttons=tuple(self.settings["bindings"]["keepOld"][-1:]),
+                message="Confirm didn't register; pressing it again.",
+            )
         current = self._settled_current(mode, cards)
         if current is not None:
             if key(current) != self.expected_key:

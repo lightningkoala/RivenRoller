@@ -17,7 +17,9 @@ import time
 from PySide6.QtCore import QObject, QTimer, Signal
 
 HOLD_SECONDS = 0.06
-GAP_SECONDS = 0.15
+# Time after each button before the next one. Warframe drops a Confirm that
+# arrives while the card selection is still switching.
+GAP_SECONDS = 0.4
 GAME_TITLE = "Warframe"
 
 

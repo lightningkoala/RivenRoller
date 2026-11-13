@@ -145,7 +145,8 @@ class SimGame:
             self._roll()
         elif self.screen == "compare":
             if button == "l1":
-                self.cursor = "old"
+                # L1 switches the selection each time it is pressed.
+                self.cursor = "new" if self.cursor == "old" else "old"
             elif button == "r1":
                 self.cursor = "new"
             elif button == "cross":

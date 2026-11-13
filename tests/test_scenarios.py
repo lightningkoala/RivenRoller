@@ -166,7 +166,9 @@ class ThingsGoingWrong(unittest.TestCase):
     def test_ignored_presses_are_repeated_once(self):
         # Press order per roll: cycle, yes, l1, cross, yes. Drop a mid-run Cycle
         # (index 5) and, separately, the Confirm after L1 (index 3).
-        for dropped, extra in ((5, 1), (3, 2)):
+        # L1 toggles the selection, so the repeat after a dropped Confirm must be
+        # the Confirm alone (a real run kept the wrong card otherwise).
+        for dropped, extra in ((5, 1), (3, 1)):
             game, roller, junk = self.setup(settings={"maxRolls": 3},
                                             drop_presses={dropped})
             play(game, roller)
