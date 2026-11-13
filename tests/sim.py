@@ -41,6 +41,7 @@ class SimGame:
         self.pools = {"positive": pool("positive"), "negative": pool("negative")}
         self.locked = None      # (id, polarity, quality)
         self.spliced = None     # (id, quality)
+        self.frozen = None      # (positives, has_negative) once spliced
         self.current = self.random_roll()
         self.new = None
         self.screen, self.wait, self.cursor = "cycle", 0, None
@@ -86,8 +87,12 @@ class SimGame:
         if self.locked:
             (positives if self.locked[1] == "positive" else negatives).append(
                 (self.locked[0], self.locked[2]))
-        k = max(self.rng.choice((2, 3)), len(positives))
-        has_negative = bool(negatives) or self.rng.random() < 0.5
+        if self.frozen:
+            # Splicing fixes the positive/negative counts for every cycle.
+            k, has_negative = self.frozen
+        else:
+            k = max(self.rng.choice((2, 3)), len(positives))
+            has_negative = bool(negatives) or self.rng.random() < 0.5
         taken = {i for i, _ in positives + negatives}
         while len(positives) < k:
             identity = self.rng.choice(self.pools["positive"])
@@ -112,14 +117,31 @@ class SimGame:
         self.locked = (identity, polarity, stat["_q"])
 
     def splice(self, splice_id, pair):
+        """Both ingredients are consumed; the spliced stat (always positive,
+        higher ingredient quality) plus one random trait take their place. The
+        random trait is negative if a negative was consumed, so the layout is
+        unchanged, and it stays fixed on every later cycle."""
         stats = {s["id"]: s for s in self.current["stats"]}
         quality = max(stats[i]["_q"] for i in pair)
         keep = [s for s in self.current["stats"] if s["id"] not in pair]
+        positives = [(splice_id, quality)] + [
+            (s["id"], s["_q"]) for s in keep if s["polarity"] == "positive"]
+        negatives = [(s["id"], s["_q"]) for s in keep if s["polarity"] == "negative"]
+        consumed_negative = any(stats[i]["polarity"] == "negative" for i in pair)
+        sign = "negative" if consumed_negative else "positive"
+        taken = {i for i, _ in positives + negatives} | set(pair)
+        choices = [i for i in self.pools[sign] if i not in taken]
+        replacement = (self.rng.choice(choices), self.rng.uniform(-10, 10))
+        (negatives if consumed_negative else positives).append(replacement)
         self.spliced, self.locked = (splice_id, quality), None
-        self.current = self.build(
-            [(splice_id, quality)]
-            + [(s["id"], s["_q"]) for s in keep if s["polarity"] == "positive"],
-            [(s["id"], s["_q"]) for s in keep if s["polarity"] == "negative"])
+        self.frozen = (len(positives), bool(negatives))
+        self.current = self.build(positives, negatives)
+
+    def mark_spliced(self, splice_id, quality):
+        """Scenario helper: treat the current card as already spliced."""
+        self.spliced, self.locked = (splice_id, quality), None
+        fmt = self.current["format"]
+        self.frozen = (int(fmt[0]), fmt[2] == "1")
 
     def player_keeps(self, which):
         assert self.screen == "compare"

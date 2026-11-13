@@ -129,6 +129,15 @@ class FullRuns(unittest.TestCase):
             "Lex", positives=["viral", "multishot"], negative="puncture", seed=2)
         self.assert_target(game, prefs)
 
+    def test_no_negative_target_with_negatives_rolling(self):
+        # Negatives roll along the way but must never be spliced into a
+        # no-negative target.
+        for seed in (1, 6, 9):
+            game, roller, events, prefs = self.run_plan(
+                "Boar", positives=["ammo-efficiency", "multishot", "damage"],
+                seed=seed)
+            self.assert_target(game, prefs)
+
     def test_archgun_splice_without_baseline(self):
         entry = next(w for w in CATALOG.weapons if w["kind"] == "Archgun")
         game, roller, events, prefs = self.run_plan(
@@ -152,7 +161,7 @@ class EitherLock(unittest.TestCase):
         prefs = plan("Mire", lock_grade="S", **MIRE)
         game = SimGame(CATALOG, weapon("Mire"), seed=1)
         game.current = self.spliced(game)
-        game.spliced = ("status-damage", 9.8)
+        game.mark_spliced("status-damage", 9.8)
         game.scripted = [new_roll(game)]
         roller = Roller(CATALOG, prefs, {"maxRolls": 1, **settings})
         play(game, roller)
@@ -206,7 +215,8 @@ class EitherLock(unittest.TestCase):
             [("status-damage", 9.8), ("melee-damage", 9.9), ("critical-chance", 9.7)])
         prefs = plan("Mire", lock_grade="S", **MIRE)
         game = SimGame(CATALOG, weapon("Mire"), seed=2)
-        game.current, game.spliced = self.spliced(game), ("status-damage", 9.8)
+        game.current = self.spliced(game)
+        game.mark_spliced("status-damage", 9.8)
         game.scripted = [both(game)]
         roller = Roller(CATALOG, prefs, {"maxRolls": 10000, "anyTargetLock": True})
 
@@ -529,3 +539,30 @@ class ThingsGoingWrong(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SimSplice(unittest.TestCase):
+    """The simulator splices the way the game does."""
+
+    def test_negative_consumed_gives_new_negative_and_fixed_layout(self):
+        game = SimGame(CATALOG, weapon("Boar"), seed=3)
+        game.current = game.card(
+            [("ammo-maximum", 9.8), ("damage", 0), ("zoom", 0)], [("weapon-recoil", -9)])
+        game.splice("ammo-efficiency", ("ammo-maximum", "weapon-recoil"))
+        self.assertEqual(game.current["format"], "3p1n")
+        self.assertIn("ammo-efficiency", ids(game.current, "positive"))
+        self.assertNotIn("weapon-recoil", ids(game.current, "negative"))
+        spliced = next(s for s in game.current["stats"] if s["id"] == "ammo-efficiency")
+        self.assertEqual(spliced["_q"], 9.8)  # higher ingredient value
+        for _ in range(200):
+            roll = game.random_roll()
+            self.assertEqual(roll["format"], "3p1n")
+            self.assertIn("ammo-efficiency", ids(roll, "positive"))
+
+    def test_two_positives_consumed_gives_new_positive(self):
+        game = SimGame(CATALOG, weapon("Boar"), seed=4)
+        game.current = game.card([("ammo-maximum", 2), ("weapon-recoil", 9.9)])
+        game.splice("ammo-efficiency", ("ammo-maximum", "weapon-recoil"))
+        self.assertEqual(game.current["format"], "2p0n")
+        for _ in range(200):
+            self.assertEqual(game.random_roll()["format"], "2p0n")

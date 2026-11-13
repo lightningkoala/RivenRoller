@@ -258,6 +258,90 @@ class RollerTests(unittest.TestCase):
         self.assertEqual(step.event, "stopped")
         self.assertIn("Boar", step.message)
 
+    # -------------------------------------------- negatives and splice layout
+
+    def test_negative_ingredient_graded_by_penalty_size(self):
+        # A negative's grade is the size of its penalty, the same random value
+        # a splice inherits: -S Recoil makes an S splice, a mild -F doesn't.
+        roller = self.roller()
+        game = Game(roller, self.junk())
+        game.start()
+        step, kept_new = game.roll(card(stat("weapon-recoil", "F", polarity="negative"),
+                                        stat("damage"), stat("zoom"), stat("multishot")))
+        self.assertFalse(kept_new)
+        step, kept_new = game.roll(card(stat("weapon-recoil", "S", polarity="negative"),
+                                        stat("damage"), stat("zoom"), stat("multishot")))
+        self.assertTrue(kept_new)
+        self.assertEqual(step.event, "paused")
+        self.assertIn("−Weapon Recoil at S", step.message)
+        self.assertEqual(roller.locked_ingredient, ("weapon-recoil", "negative"))
+
+    def test_negative_ingredient_ignored_without_negative_target(self):
+        # Splicing with a negative leaves a new negative for good, so a
+        # no-negative target can't use one.
+        roller = self.roller(plan(format="3p0n", negative="any"))
+        junk = card(stat("damage", fmt="3p0n"), stat("zoom", fmt="3p0n"),
+                    stat("punch-through", fmt="3p0n"), fmt="3p0n")
+        game = Game(roller, junk)
+        game.start()
+        self.assertEqual(roller.stage, "ingredient")
+        step, kept_new = game.roll(card(stat("weapon-recoil", "S", polarity="negative"),
+                                        stat("damage"), stat("zoom"), stat("multishot")))
+        self.assertFalse(kept_new)
+        self.assertEqual(roller.phase, "await_dialog")  # rolled on
+        # A positive ingredient still counts.
+        step, kept_new = game.roll(card(stat("weapon-recoil", "S", fmt="3p0n"),
+                                        stat("damage", fmt="3p0n"),
+                                        stat("zoom", fmt="3p0n"), fmt="3p0n"))
+        self.assertTrue(kept_new)
+        self.assertEqual(roller.locked_ingredient, ("weapon-recoil", "positive"))
+
+    def test_pair_on_wrong_layout_is_not_spliced(self):
+        # Target 3 positives + negative; both ingredients on a 2p0n card.
+        roller = self.roller()
+        game = Game(roller, self.junk())
+        game.start()
+        step, kept_new = game.roll(card(stat("ammo-maximum", "S", fmt="2p0n"),
+                                        stat("weapon-recoil", "F", fmt="2p0n"),
+                                        fmt="2p0n"))
+        self.assertTrue(kept_new)
+        self.assertNotIn("Splice", step.message)
+        self.assertIn("Lock it", step.message)  # use it as a locked ingredient
+        self.assertEqual(roller.stage, "partner")
+
+        game._apply(roller.resume(game.t))
+        game.feed(screen("current", game.current))
+        # Partner again, still on the wrong layout: roll on.
+        step, kept_new = game.roll(card(stat("ammo-maximum", "S", fmt="2p0n"),
+                                        stat("weapon-recoil", "B", fmt="2p0n"),
+                                        fmt="2p0n"))
+        self.assertFalse(kept_new)
+        self.assertEqual(roller.phase, "await_dialog")
+        # Partner on the target layout: splice.
+        step, kept_new = game.roll(card(stat("ammo-maximum", "S"),
+                                        stat("weapon-recoil", "F"), stat("zoom"),
+                                        stat("slash", polarity="negative")))
+        self.assertTrue(kept_new)
+        self.assertIn("Splice", step.message)
+
+    def test_auto_start_pair_on_wrong_layout_is_not_spliced(self):
+        roller = self.roller()
+        game = Game(roller, card(stat("ammo-maximum", "S", fmt="2p0n"),
+                                 stat("weapon-recoil", "F", fmt="2p0n"), fmt="2p0n"))
+        step = game.start()
+        self.assertEqual(step.event, "paused")
+        self.assertNotIn("Splice", step.message)
+        self.assertEqual(roller.stage, "partner")
+
+    def test_spliced_card_on_wrong_layout_stops(self):
+        roller = self.roller()
+        game = Game(roller, card(stat("ammo-efficiency", "S", fmt="2p0n"),
+                                 stat("zoom", fmt="2p0n"), fmt="2p0n"))
+        step = game.start()
+        self.assertEqual(roller.phase, "stopped")
+        self.assertIn("keeps its layout", step.message)
+        self.assertEqual(game.pressed, [])  # nothing rolled
+
     def test_roll_limit(self):
         roller = self.roller(maxRolls=2)
         game = Game(roller, self.junk())
