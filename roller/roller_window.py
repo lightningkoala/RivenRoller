@@ -9,6 +9,7 @@ import traceback
 import screen_modes
 from tracker_mode import ModeTracker
 
+from alerts import History
 from gamepad import GamepadUnavailable, Hotkeys, InputSender
 from roller import Roller
 from roller_view import RollerView
@@ -16,9 +17,26 @@ from window import MainWindow
 from worker import CaptureWorker
 
 
+class QuietHistory(History):
+    """RivenLens' alert history, silent while the roller is running.
+
+    RivenLens dings for every new card that carries a watched stat. Once a stat
+    is locked or spliced it is on every roll, so that alert would sound on each
+    one. The roller plays its own sound when it pauses, finishes or stops.
+    Matches are still recorded, so they don't all ding when the run ends.
+    """
+
+    muted = False
+
+    def take(self, keys):
+        fresh = super().take(keys)
+        return [] if self.muted else fresh
+
+
 class RollerWindow(MainWindow):
     def __init__(self, preferences, store, worker_factory=CaptureWorker):
         super().__init__(preferences, worker_factory)
+        self.match_history = QuietHistory()
         self.run_log = preferences.directory / "logs" / "roller-run.log"
         self._seen = None
         self._logged_decision = ""
@@ -49,6 +67,8 @@ class RollerWindow(MainWindow):
     # ------------------------------------------------- RivenLens window hooks
 
     def receive(self, state):
+        roller = getattr(self, "roller", None)
+        self.match_history.muted = roller is not None and roller.active
         super().receive(state)
         if (
             not self._closing

@@ -92,6 +92,17 @@ def push(state):
     QCoreApplication.processEvents()
 
 
+# RivenLens' own stage dings stay silent during a run (a locked or spliced stat
+# would otherwise ding on every roll) and aren't replayed afterwards.
+from roller_window import QuietHistory  # noqa: E402
+
+assert isinstance(window.match_history, QuietHistory)
+history = QuietHistory()
+history.muted = True
+assert history.take(["a", "b"]) == []
+history.muted = False
+assert history.take(["a", "b", "c"]) == ["c"]
+
 junk = card(stat("damage"), stat("zoom"), stat("slash"),
             stat("puncture", polarity="negative"))
 window.start_roller()
@@ -102,6 +113,7 @@ ingredient = card(stat("reload-speed", "S"), stat("zoom"), stat("slash"),
                   stat("puncture", polarity="negative"))
 push(screen("comparison", junk, ingredient))
 push(screen("comparison", junk, ingredient))
+assert window.match_history.muted  # the run was active on the last frame
 assert Pad.log == ["cross", "cross"], Pad.log  # wanted roll: nothing pressed
 assert window.roller.phase == "paused", window.roller.message
 assert "Keep the NEW roll yourself" in window.roller_view.status.text()
