@@ -309,7 +309,12 @@ class RollerWindow(MainWindow):
             self.warning_sound.play()
         if step.event and self.tray and not quiet:
             self.tray.showMessage("RivenRoller", step.message)
-        if step.event and not quiet:
-            self.notifier.send(self.companion_store.state, step.event, step.message)
-        self.publish_companion()
         self.roller_view.set_phase(self.roller.phase, step.message or None)
+        try:  # the companion only reports; a fault in it must never touch a run
+            if step.event and not quiet:
+                self.notifier.send(
+                    self.companion_store.state, step.event, step.message
+                )
+            self.publish_companion()
+        except Exception:
+            traceback.print_exc()

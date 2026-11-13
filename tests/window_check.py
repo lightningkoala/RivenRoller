@@ -208,6 +208,17 @@ except urllib.error.HTTPError:
     raise AssertionError("page still served after being turned off")
 except OSError:
     pass
+# A fault inside the companion is logged and never reaches the run.
+def broken(*_):
+    raise RuntimeError("companion fault")
+
+
+window.publish_companion = broken
+window.start_roller()
+assert window.roller.active and not window.roller_view.start.isEnabled()
+window.stop_roller("Stopped by you.", quiet=True)
+assert window.roller.phase == "stopped" and window.roller_view.start.isEnabled()
+del window.publish_companion
 window.apply_capture()  # pausing OCR must not error with a stopped roller
 assert not any((Path(data) / "Arbitrations").glob("**/*")), "touched RivenLens data"
 window.close()
